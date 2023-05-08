@@ -178,7 +178,7 @@ def train_one(acquisition_type = 'BADGE', batch_size = main_args.batch_size, Lab
         acc[rd] = dt.get_acc_on_set(test)
         print('Testing accuracy:', round(acc[rd]*100, 2), flush=True)
 
-    print('Training Completed')
+    print('Training Completed For Dataset {} and Acquisition Strategy {}'.format(main_args.dataset, main_args.acquisition))
 
     if repeat == True:
         now = datetime.datetime.now()
