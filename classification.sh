@@ -7,14 +7,14 @@
 # batch_size=512
 
 # Slurm arguments
-node=r[001-005]
+node=b002,e002,f[002-003]
 partition=yuxinchen-contrib
 mem=48G
-jobname=SVHN_CoreSet_250_200
-arguments="--dataset SVHN --acquisition CoreSet --batch_size 250 --Label_Initialize 200"
+jobname=CIFAR10_random_200_1000
+arguments="--dataset CIFAR10 --acquisition random --batch_size 200 --Label_Initialize 1000"
 
 # Get the results for the dense network
-srun -w ${node} --gres=gpu:4 -c 32 --ntasks-per-node=1 --mem ${mem} -p ${partition} --job-name=${jobname} python3 -m classification $arguments
+srun -w ${node} --gres=gpu:4 -c 16 --ntasks-per-node=2 --mem ${mem} -p ${partition} --job-name=${jobname} python3 -m classification $arguments
 
 
 # chmod 777 ${results_root}

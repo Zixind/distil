@@ -21,7 +21,7 @@ import pickle
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=200, choices = [5, 10, 15, 20, 200, 250])  
+parser.add_argument('--batch_size', type=int, default=200, choices = [5, 10, 15, 20, 200, 250, 300])  
 parser.add_argument('--total_rounds', type=int, default=30)
 parser.add_argument('--Label_Initialize', type=int, default = 200, choices = [20, 30, 40, 200])
 parser.add_argument('--model', type=str, default='resnet18', choices = ['vgg16', 'resnet18'])
