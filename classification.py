@@ -21,14 +21,14 @@ import pickle
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=10, choices = [5, 10, 15, 20])  
+parser.add_argument('--batch_size', type=int, default=200, choices = [5, 10, 15, 20, 200, 250])  
 parser.add_argument('--total_rounds', type=int, default=30)
-parser.add_argument('--Label_Initialize', type=int, default = 20, choices = [20, 30, 40])
+parser.add_argument('--Label_Initialize', type=int, default = 200, choices = [20, 30, 40, 200])
 parser.add_argument('--model', type=str, default='resnet18', choices = ['vgg16', 'resnet18'])
-parser.add_argument('--dataset', type=str, default='SVHN', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
+parser.add_argument('--dataset', type=str, default='CIFAR10', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
 parser.add_argument('--num_repeats', type=int, default=10)
-parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
-main_args = parser.parse_args(args=[])
+parser.add_argument('--acquisition', type=str, default='random', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
+main_args = parser.parse_args()
 
 DATASET_SIZES = {
     'MNIST': 28,
@@ -103,7 +103,7 @@ Unlabeled = source_data['Unlabeled']
 test = source_data['test']
 
 
-def train_one(acquisition_type = 'BADGE', batch_size = main_args.batch_size, Labeled = Labeled, Unlabeled = Unlabeled, test = test, model = load_data_dict[main_args.model], n_class = num_classes, n_rounds = main_args.total_rounds, repeat = False, trial_num = 0):
+def train_one(acquisition_type = 'random', batch_size = main_args.batch_size, Labeled = Labeled, Unlabeled = Unlabeled, test = test, model = load_data_dict[main_args.model], n_class = num_classes, n_rounds = main_args.total_rounds, repeat = False, trial_num = 0):
     
     if acquisition_type == 'random':
         strategy_args = {'batch_size' : batch_size, 'device' : 'cuda'}  #Budget per round
@@ -182,7 +182,7 @@ def train_one(acquisition_type = 'BADGE', batch_size = main_args.batch_size, Lab
     if repeat == True:
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
-        file_name = "Accuracy_{}_For_{}_Total_Rounds_{}_For_Dataset_{}.txt".format(timestamp, acquisition_type, main_args.total_rounds, main_args.dataset)
+        file_name = "Accuracy_{}_For_{}_Total_Rounds_{}_For_Dataset_{}_with_Batch_Size_{}_Initial_Pool_{}.txt".format(timestamp, acquisition_type, main_args.total_rounds, main_args.dataset, main_args.batch_size, main_args.Label_Initialize)
         with open(os.path.join(base_dir,file_name), 'w') as f:
             for item in acc:
                 f.write("%s\n" % item)
@@ -212,7 +212,7 @@ def training_loop(acquisition_type = 'CoreSet', trials = main_args.num_repeats):
 
         # # Save the model
         # torch.save(model.state_dict(), file_name)
-    with open(os.path.join(base_dir, 'Acquisition Type {} for Dataset {} Trials {}.pkl'.format(acquisition_type, main_args.dataset, trials)), 'wb') as fp:
+    with open(os.path.join(base_dir, 'Acquisition Type {} for Dataset {} Trials {} with Batch Size {} and Initial Pool {}.pkl'.format(acquisition_type, main_args.dataset, trials, main_args.batch_size, main_args.Label_Initialize)), 'wb') as fp:
         pickle.dump(trials_acc, fp)
     return trials_acc
         
