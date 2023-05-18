@@ -212,7 +212,7 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         
     return results
     
-results = sample_utility_samples()
+# results = sample_utility_samples()
 
 # # open a file to write the pickled list
 # with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
@@ -222,9 +222,9 @@ results = sample_utility_samples()
 
 
 # open a file to load the pickled list
-# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'rb') as f:
-#     # use pickle.dump to pickle the list
-#     results = pickle.load(f)
+with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'rb') as f:
+    # use pickle.dump to pickle the list
+    results = pickle.load(f)
 
    
 def deepset_ot(samples, Epochs = 150):

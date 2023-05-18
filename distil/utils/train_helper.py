@@ -128,6 +128,7 @@ class data_train:
         else:
             batch_size = 1 
         
+        
         loader_te = DataLoader(test_dataset, shuffle=False, pin_memory=True, batch_size=batch_size)
         self.clf.eval()
         accFinal = 0.
@@ -140,6 +141,7 @@ class data_train:
                 accFinal += torch.sum(1.0*(torch.max(out,1)[1] == y)).item() #.data.item()
 
         return accFinal / len(test_dataset)
+        
 
     def _train_weighted(self, epoch, loader_tr, optimizer, gradient_weights):
         self.clf.train()
