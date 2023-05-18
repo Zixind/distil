@@ -12,6 +12,9 @@ import random
 import numpy as np
 from torchvision.models import resnet18, vgg16
 
+
+
+
 import argparse
 from argparse import ArgumentParser
 
@@ -41,7 +44,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50])
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80])
 main_args = parser.parse_args()
 
 DATASET_SIZES = {
@@ -73,7 +76,7 @@ Feature_Cost_dim = {
 in_dims = {
     'MNIST': int(28*28),
     'CIFAR10': int(28*28),
-    'SVHN': int(32*32*3)
+    'SVHN': int(32*32)    #apply mean before inputing to deepsets model
 }
 
 
@@ -133,7 +136,7 @@ source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, ba
 Labeled = source_data[0]['Labeled']
 Labeled2 = source_data2[0]['Labeled']
 Unlabeled = source_data[0]['Unlabeled']
-validation = source_data[0]['valid'] #fix validation dataset
+validation = source_data[0]['valid'] #fix validation dataset it will be used over the whole script
 test = source_data[1]['test']     
 
 print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
@@ -147,7 +150,8 @@ def calc_OT(dataloader1, embedder, verbose = 0):
     for p in embedder.parameters():
         p.requires_grad = False
     Labeled = dataloader1['Labeled']
-    valid = dataloader1['valid']
+    # valid = dataloader1['valid']
+    valid = validation
     # Here we use same embedder for both datasets
     feature_cost = FeatureCost(src_embedding = embedder,
                            src_dim = Feature_Cost_dim[src_dataset],
@@ -175,11 +179,17 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 
 def get_acc_dataloader(dataloader, model, verbose = 1):    
     args = {'n_epoch':200, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.99, 'optimizer':'adam'} 
-    dt = data_train(dataloader[0]['Labeled'], model, args)
+    dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
 
     # Get the test accuracy of the initial model  on validation dataset
 
-    acc = dt.get_acc_on_set(dataloader[0]['valid']) 
+    # valid = dataloader[0]['valid']
+    valid = validation
+    # Retrain the model and update the strategy with the result
+    model = dt.train()
+    # strategy.update_model(model)
+
+    acc = dt.get_acc_on_set(valid) 
 
     if verbose:
         print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
@@ -231,7 +241,7 @@ def deepset_ot(samples, Epochs = 150):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
-    writer = SummaryWriter('runs/experiment_1')
+    # writer = SummaryWriter('runs/experiment_1')
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -240,9 +250,10 @@ def deepset_ot(samples, Epochs = 150):
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
             for images, labels in dataloader:
             # Forward pass
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10':
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
                     images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1)  
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
                 outputs = model(images, opt_transport_tensor)
 
             # Compute loss
@@ -261,10 +272,78 @@ def deepset_ot(samples, Epochs = 150):
         #     writer.add_scalar('accuracy', accuracy, epoch * len(samples) + i)
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, main_args.sample_size))  
     
-    writer.close()
+    return
+    
+    # writer.close()
 
     
-deepset_ot(results, Epochs = 150)            
+deepset_ot(results, Epochs = 150) 
+
+def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
+    embedder.fc = torch.nn.Identity()
+    for p in embedder.parameters():
+        p.requires_grad = False
+    Labeled = dataloader1['Labeled']
+    Labeled2 = dataloader2['Labeled']
+    # Here we use same embedder for both datasets
+    feature_cost = FeatureCost(src_embedding = embedder,
+                           src_dim = Feature_Cost_dim[src_dataset],
+                           tgt_embedding = embedder,
+                           tgt_dim = Feature_Cost_dim[src_dataset],
+                           p = 2,
+                           device=main_args.device)
+
+    dist = DatasetDistance(Labeled, Labeled2,
+                          inner_ot_method = 'exact',
+                          debiased_loss = True,
+                          feature_cost = feature_cost,
+                          sqrt_method = 'spectral',
+                          sqrt_niters=10,
+                          precision='single',
+                          p = 2, entreg = 1e-1,
+                          device=main_args.device)
+    d = dist.distance(maxsamples = 1000)
+    if verbose:
+        print(f'OTDD(Labeled,Validation)={d:8.2f}')
+    return d
+
+def interpolate_utility_value(dataloader1, dataloader2, dataloader_between, acc1, acc2):
+    d2b = calc_OT_interpolate(dataloader_between, dataloader2['Labeled']) 
+    d1b = calc_OT_interpolate(dataloader1['Labeled'], dataloader_between)
+    return (d2b * acc1 + d1b * acc2)/(d2b + d1b)
+
+
+
+def concat_dataloader(dataloader1, dataloader2):
+# Suppose you have dataloaders `dataloader1` and `dataloader2`
+    dataset1 = dataloader1['Labeled'].dataset
+    dataset2 = dataloader2['Labeled'].dataset
+
+    # Concatenate datasets
+    combined_dataset = ConcatDataset([dataset1, dataset2])
+    
+    total_size = len(combined_dataset)
+
+    # Create new dataloader
+    combined_dataloader = torch.utils.data.DataLoader(combined_dataset, batch_size=total_size)  # set batch size as needed
+
+
+    num_samples = random.sample(range(len(combined_dataset)), 1)[0]  #generate a random length sample
+    indices = random.sample(range(len(combined_dataset)), num_samples)
+
+
+# Now, we create a subset.
+    subset = Subset(combined_dataset, indices)
+    
+    subset_dataloader = torch.utils.data.DataLoader(subset, batch_size=len(subset))
+    
+    return subset_dataloader
+
+
+# def generate_utility_samples():
+
+
+
 
     # for i in range(len(samples)):
         
