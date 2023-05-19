@@ -45,8 +45,12 @@ parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80])
+parser.add_argument('--Epochs', type=int, default=250)
 main_args = parser.parse_args()
 
+
+#MNIST might not have OT_distance higher accuracy lower
+#CIFAR10 has better prediction
 DATASET_SIZES = {
     'MNIST': 28,
     'SVHN': 32,
@@ -178,7 +182,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 
 
 def get_acc_dataloader(dataloader, model, verbose = 1):    
-    args = {'n_epoch':200, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.99, 'optimizer':'adam'} 
+    args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.80, 'optimizer':'adam'} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
 
     # Get the test accuracy of the initial model  on validation dataset
@@ -202,6 +206,33 @@ def utility_sample(dataloader = source_data):
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
     return OT_distance, acc
 
+
+def evaluate(utility_samples):
+    '''evaluate new utility samples calculate MSE'''
+    net = torch.load('Net_{}_Sample_Size_{}'.format(main_args.dataset, main_args.sample_size))
+    utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+    criterion = nn.MSELoss()
+    test_loss = 0
+    for dataloader, ot, accuracy in utility_samples:
+            opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for images, labels in dataloader:
+            # Forward pass
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = net(images, opt_transport_tensor)
+
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+                test_loss += loss.item()
+    test_loss /= len(utility_samples)
+    return test_loss
+    
+
+
+
 def sample_utility_samples(sample_size = main_args.sample_size):
     results = []
     
@@ -223,6 +254,7 @@ def sample_utility_samples(sample_size = main_args.sample_size):
     return results
     
 results = sample_utility_samples()
+evaluate(results)
 
 # # open a file to write the pickled list
 # with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
@@ -277,7 +309,7 @@ def deepset_ot(samples, Epochs = 150):
     # writer.close()
 
     
-deepset_ot(results, Epochs = 150) 
+# deepset_ot(results, Epochs = main_args.Epochs) 
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()
