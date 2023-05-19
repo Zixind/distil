@@ -187,7 +187,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1):
 
     # Get the test accuracy of the initial model  on validation dataset
 
-    # valid = dataloader[0]['valid']
+    # valid = dataloader[0]['valid']  # need to chagne to a randomized validation set during pretrain      main phase 5000 fixed validation set
     valid = validation
     # Retrain the model and update the strategy with the result
     model = dt.train()
@@ -209,7 +209,7 @@ def utility_sample(dataloader = source_data):
 
 def evaluate(utility_samples):
     '''evaluate new utility samples calculate MSE'''
-    net = torch.load('Net_{}_Sample_Size_{}'.format(main_args.dataset, main_args.sample_size))
+    net = torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80))
     utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
     criterion = nn.MSELoss()
     test_loss = 0
