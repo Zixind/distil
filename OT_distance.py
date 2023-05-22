@@ -153,6 +153,7 @@ print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
 
 
 def calc_OT(dataloader1, embedder, verbose = 0):
+    '''calculate Optimal Transport distance with Feature Cost'''
     embedder.fc = torch.nn.Identity()
     for p in embedder.parameters():
         p.requires_grad = False
@@ -185,6 +186,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 
 
 def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True):    
+    '''Get accuracy on randomized/non_randomized validation set'''
     args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
 
@@ -207,6 +209,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
 # get_acc_dataloader(source_data, model=ResNet18(num_classes=10))
 
 def utility_sample(dataloader = source_data):
+    '''Collect One Utility Sample'''
     OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
     return OT_distance, acc
