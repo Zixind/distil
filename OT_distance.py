@@ -44,10 +44,13 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80])
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40])
 parser.add_argument('--Epochs', type=int, default=250)
 main_args = parser.parse_args()
 
+
+
+## Below are for Pretraining network
 
 #MNIST might not have OT_distance higher accuracy lower
 #CIFAR10 has better prediction
@@ -134,7 +137,7 @@ load_data_dict = {
 
 # print("CUDA is available:", torch.cuda.is_available())
 
-source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=2000)
+source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500)
 source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
 
 Labeled = source_data[0]['Labeled']
@@ -181,14 +184,16 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 # calc_OT(source_data[0], embedder = resnet18(pretrained=True).eval())
 
 
-def get_acc_dataloader(dataloader, model, verbose = 1):    
-    args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.80, 'optimizer':'adam'} 
+def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True):    
+    args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
 
     # Get the test accuracy of the initial model  on validation dataset
 
-    # valid = dataloader[0]['valid']  # need to chagne to a randomized validation set during pretrain      main phase 5000 fixed validation set
-    valid = validation
+    if validation_randomized:
+        valid = dataloader[0]['valid']  # need to chagne to a randomized validation set during pretrain      main phase 5000 fixed validation set
+    else:
+        valid = validation
     # Retrain the model and update the strategy with the result
     model = dt.train()
     # strategy.update_model(model)
@@ -254,7 +259,7 @@ def sample_utility_samples(sample_size = main_args.sample_size):
     return results
     
 results = sample_utility_samples()
-evaluate(results)
+# evaluate(results)
 
 # # open a file to write the pickled list
 # with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
@@ -273,7 +278,7 @@ def deepset_ot(samples, Epochs = 150):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
-    # writer = SummaryWriter('runs/experiment_1')
+    writer = SummaryWriter('runs/experiment_1')
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -299,17 +304,18 @@ def deepset_ot(samples, Epochs = 150):
         train_loss /= len(samples)
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
-        # if (epoch+1) % 10 == 0:
-        #     writer.add_scalar('training loss', loss.item(), epoch * len(samples) + i)
-        #     writer.add_scalar('accuracy', accuracy, epoch * len(samples) + i)
+        if (epoch+1) % 10 == 0:
+            writer.add_scalar('training loss', loss.item())
+            writer.add_scalar('accuracy', accuracy)
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, main_args.sample_size))  
     
+    writer.close()
     return
     
-    # writer.close()
+    
 
     
-# deepset_ot(results, Epochs = main_args.Epochs) 
+deepset_ot(results, Epochs = main_args.Epochs) 
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()

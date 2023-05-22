@@ -319,15 +319,18 @@ class DeepSet_OT(nn.Module):
             if callable(reset_op):
                 reset_op()
             
-    def forward(self, input, ot):
+    def forward(self, input, ot, representation = False):
         # Flatten the images into vectors
     
         x = self.feature_extractor(input)
         # x = x.sum(dim=1)
         x = x.sum(dim=0).unsqueeze(0)
-        x = self.regressor(x)
-        combined = torch.cat((x, ot.view(1,1)), dim=1)
-        y = self.backbone(combined)
+        if representation:
+            return x
+        else:
+            x = self.regressor(x)
+            combined = torch.cat((x, ot.view(1,1)), dim=1)
+            y = self.backbone(combined)
         return y.view(1,1)
 
     def __repr__(self):
