@@ -138,10 +138,10 @@ load_data_dict = {
 # print("CUDA is available:", torch.cuda.is_available())
 
 source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500)
-source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
+# source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
 
 Labeled = source_data[0]['Labeled']
-Labeled2 = source_data2[0]['Labeled']
+# Labeled2 = source_data2[0]['Labeled']
 Unlabeled = source_data[0]['Unlabeled']
 validation = source_data[0]['valid'] #fix validation dataset it will be used over the whole script
 test = source_data[1]['test']     
@@ -236,6 +236,7 @@ def evaluate(utility_samples):
                 loss = criterion(outputs, accuracy_tensor)
                 test_loss += loss.item()
     test_loss /= len(utility_samples)
+    print('Test Loss is {}'.format(test_loss))
     return test_loss
     
 
@@ -261,7 +262,7 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         
     return results
     
-results = sample_utility_samples()
+
 # evaluate(results)
 
 # # open a file to write the pickled list
@@ -318,7 +319,7 @@ def deepset_ot(samples, Epochs = 150):
     
 
     
-deepset_ot(results, Epochs = main_args.Epochs) 
+# deepset_ot(results, Epochs = main_args.Epochs) 
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()
@@ -379,6 +380,14 @@ def concat_dataloader(dataloader1, dataloader2):
     subset_dataloader = torch.utils.data.DataLoader(subset, batch_size=len(subset))
     
     return subset_dataloader
+
+
+
+
+results = sample_utility_samples()
+loss = evaluate(utility_samples = results)
+
+print('Final Test Loss is', loss)
 
 
 # def generate_utility_samples():
