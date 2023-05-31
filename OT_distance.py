@@ -215,7 +215,7 @@ def utility_sample(dataloader = source_data):
     return OT_distance, acc
 
 
-def evaluate(utility_samples):
+def evaluate():
     '''evaluate new utility samples calculate MSE'''
     net = torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80))
     utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
@@ -225,20 +225,22 @@ def evaluate(utility_samples):
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
             for images, labels in dataloader:
-            # Forward pass
                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
                     images = images.mean(dim=1)
                     images = images.view(images.size(0), -1) 
                     # print(images.shape) 
-                outputs = net(images, opt_transport_tensor)
+                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
                 test_loss += loss.item()
     test_loss /= len(utility_samples)
     print('Test Loss is {}'.format(test_loss))
+    with open('Loss_Evaluate.txt', 'w') as file:
+        file.write(test_loss)
     return test_loss
     
+
 
 
 
@@ -260,24 +262,7 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         
         results.append([Labeled, ot, acc])
         
-    return results
-    
-
-# evaluate(results)
-
-# # open a file to write the pickled list
-# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
-#     # use pickle.dump to pickle the list
-#     pickle.dump(results, f)
-
-
-
-# open a file to load the pickled list
-# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'rb') as f:
-#     # use pickle.dump to pickle the list
-#     results = pickle.load(f)
-
-   
+    return results   
 def deepset_ot(samples, Epochs = 150):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
@@ -382,13 +367,31 @@ def concat_dataloader(dataloader1, dataloader2):
     return subset_dataloader
 
 
+results = sample_utility_samples() 
+deepset_ot(results, Epochs = 200)  
 
 
-results = sample_utility_samples()
-loss = evaluate(utility_samples = results)
+# # results = sample_utility_samples()
+# loss = evaluate()
 
-print('Final Test Loss is', loss)
+# print('Final Test Loss is', loss)
 
+
+
+
+# evaluate(results)
+
+# # open a file to write the pickled list
+# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
+#     # use pickle.dump to pickle the list
+#     pickle.dump(results, f)
+
+
+
+# open a file to load the pickled list
+# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'rb') as f:
+#     # use pickle.dump to pickle the list
+#     results = pickle.load(f)
 
 # def generate_utility_samples():
 
