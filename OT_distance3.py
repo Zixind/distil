@@ -42,6 +42,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
+parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80])
 main_args = parser.parse_args()
 
@@ -270,36 +271,85 @@ def deepset_ot(samples, Epochs = 150):
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, main_args.sample_size))  
     
 
-def evaluate():
-    '''evaluate new utility samples calculate MSE using pretrained models'''
-    # Suppose your model is called 'model'
-    model = DeepSet_OT(in_features=in_dims[main_args.dataset])
-    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 100)))
-    model.eval() # Set the model to evaluation mode
+# def evaluate():
+#     '''evaluate new utility samples calculate MSE using pretrained models'''
+#     # Suppose your model is called 'model'
+#     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
+#     model.load_state_dict(torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 100)))
+#     model.eval() # Set the model to evaluation mode
 
-    results = sample_utility_samples(sample_size = main_args.sample_size)
+#     results = sample_utility_samples(sample_size = main_args.sample_size)
+#     criterion = nn.MSELoss()
+#     test_loss = 0
+#     for one_dataloader, ot, accuracy in results:
+#             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+#             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+#             for images, labels in one_dataloader:
+#                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+#                     images = images.mean(dim=1)
+#                     images = images.view(images.size(0), -1) 
+#                 outputs = model(images, opt_transport_tensor).to(device=main_args.device)
+
+#             # Compute loss
+#                 loss = criterion(outputs, accuracy_tensor)
+#                 print('Predicted Value: {}, True Value:{}'.format(outputs.detach().cpu().numpy(), accuracy_tensor.detach().cpu().numpy()))
+#                 test_loss += loss.item()
+#     test_loss /= len(results)
+#     print('Test Loss is {}'.format(test_loss))
+#     with open('Loss_Evaluate.txt', 'w') as file:
+#         file.write(str(test_loss))
+#     return test_loss
+           
+
+
+def evaluate():
+    '''evaluate new utility samples calculate MSE'''
     criterion = nn.MSELoss()
     test_loss = 0
-    for one_dataloader, ot, accuracy in results:
+    if main_args.OT_distance:
+        net = torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80))
+        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        for dataloader, ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
-            for images, labels in one_dataloader:
+            for images, labels in dataloader:
                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
                     images = images.mean(dim=1)
                     images = images.view(images.size(0), -1) 
-                outputs = model(images, opt_transport_tensor).to(device=main_args.device)
+                    # print(images.shape) 
+                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
-                print('Predicted Value: {}, True Value:{}'.format(outputs.detach().cpu().numpy(), accuracy_tensor.detach().cpu().numpy()))
                 test_loss += loss.item()
-    test_loss /= len(results)
-    print('Test Loss is {}'.format(test_loss))
-    with open('Loss_Evaluate.txt', 'w') as file:
-        file.write(str(test_loss))
-    return test_loss
-           
+        test_loss /= len(utility_samples)
+        print('Test Loss is {}'.format(test_loss))
+        with open('Loss_Evaluate_OT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+            file.write(test_loss)
+        return test_loss
+    else:
+        net = torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 80))
+        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        for dataloader, accuracy in utility_samples:
+            opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for images, labels in dataloader:
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
 
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+                test_loss += loss.item()
+        test_loss /= len(utility_samples)
+        print('Test Loss is {}'.format(test_loss))
+        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+            file.write(test_loss)
+        return test_loss
+    
+   
 
 # results = sample_utility_samples() 
 # deepset_ot(results, Epochs = 150)     
