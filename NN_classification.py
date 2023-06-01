@@ -18,54 +18,7 @@ import seaborn as sns
 import pickle
 
 
-class DeepSet(nn.Module):
 
-    def __init__(self, in_features, set_features=128, hidden_ext=128, hidden_reg=128):
-        super(DeepSet, self).__init__()
-        self.in_features = in_features
-        self.out_features = set_features
-        self.feature_extractor = nn.Sequential(
-            nn.Linear(in_features, hidden_ext, bias=False),
-            nn.ELU(inplace=True),
-            nn.Linear(hidden_ext, hidden_ext, bias=False),
-            nn.ELU(inplace=True),
-            nn.Linear(hidden_ext, set_features, bias=False)
-        )
-
-        self.regressor = nn.Sequential(
-            nn.Linear(set_features, hidden_reg, bias=False),
-            nn.ELU(inplace=True),
-            nn.Linear(hidden_reg, hidden_reg, bias=False),
-            nn.ELU(inplace=True),
-            nn.Linear(hidden_reg, int(hidden_reg/2), bias=False),
-            nn.ELU(inplace=True)
-        )
-
-        self.linear = nn.Linear(int(hidden_reg/2), 1)
-        self.sigmoid = nn.Sigmoid()
-        
-        self.add_module('0', self.feature_extractor)
-        self.add_module('1', self.regressor)
-        
-    def reset_parameters(self):
-        for module in self.children():
-            reset_op = getattr(module, "reset_parameters", None)
-            if callable(reset_op):
-                reset_op()
-            
-    def forward(self, input):
-        x = input
-        x = self.feature_extractor(x)
-        x = x.sum(dim=1)
-        x = self.regressor(x)
-        x = self.linear(x)
-        x = self.sigmoid(x)
-        return x
-
-    def __repr__(self):
-        return self.__class__.__name__ + '(' \
-            + 'Feature Exctractor=' + str(self.feature_extractor) \
-            + '\n Set Feature' + str(self.regressor) + ')'
 
 
 class DeepSet_cifar(nn.Module):
@@ -179,32 +132,32 @@ class PMA(nn.Module):
     def forward(self, X):
         return self.mab(self.S.repeat(X.size(0), 1, 1), X)
 
-class DeepSet(nn.Module):
-    def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128):
-        super(DeepSet, self).__init__()
-        self.num_outputs = num_outputs
-        self.dim_output = dim_output
-        self.enc = nn.Sequential(
-                nn.Linear(dim_input, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden))
-        self.dec = nn.Sequential(
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, dim_hidden),
-                nn.ReLU(),
-                nn.Linear(dim_hidden, num_outputs*dim_output))
+# class DeepSet(nn.Module):
+#     def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128):
+#         super(DeepSet, self).__init__()
+#         self.num_outputs = num_outputs
+#         self.dim_output = dim_output
+#         self.enc = nn.Sequential(
+#                 nn.Linear(dim_input, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, dim_hidden))
+#         self.dec = nn.Sequential(
+#                 nn.Linear(dim_hidden, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, dim_hidden),
+#                 nn.ReLU(),
+#                 nn.Linear(dim_hidden, num_outputs*dim_output))
 
-    def forward(self, X):
-        X = self.enc(X).mean(-2)
-        X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
-        return X
+#     def forward(self, X):
+#         X = self.enc(X).mean(-2)
+#         X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
+#         return X
 
 class SetTransformer(nn.Module):
     def __init__(self, dim_input, num_outputs = 1, dim_output = 1,
@@ -282,6 +235,59 @@ class SetTransformer_OT(nn.Module):
 
 
 #copy from Si Chen
+class DeepSet(nn.Module):
+
+    def __init__(self, in_features, set_features=128):
+        super(DeepSet, self).__init__()
+        self.in_features = in_features
+        self.out_features = set_features
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(in_features, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, set_features)
+        )
+
+        self.regressor = nn.Sequential(
+            nn.Linear(set_features, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
+        )
+        
+
+        self.add_module('0', self.feature_extractor)
+        self.add_module('1', self.regressor)
+        
+        
+    def reset_parameters(self):
+        for module in self.children():
+            reset_op = getattr(module, "reset_parameters", None)
+            if callable(reset_op):
+                reset_op()
+            
+    def forward(self, input, representation = False):
+        # Flatten the images into vectors
+    
+        x = self.feature_extractor(input)
+        # x = x.sum(dim=1)
+        x = x.sum(dim=0).unsqueeze(0)
+        if representation:
+            return x
+        else:
+            y = self.regressor(x)
+            return y.view(1,1)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'Feature Exctractor=' + str(self.feature_extractor) \
+            + '\n Set Feature' + str(self.regressor) + ')'
+            
 class DeepSet_OT(nn.Module):
 
     def __init__(self, in_features, set_features=128):

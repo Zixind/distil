@@ -19,7 +19,7 @@ from argparse import ArgumentParser
 import pickle
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -42,7 +42,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50])
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80])
 main_args = parser.parse_args()
 
 DATASET_SIZES = {
@@ -274,7 +274,7 @@ def evaluate():
     '''evaluate new utility samples calculate MSE using pretrained models'''
     # Suppose your model is called 'model'
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
-    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80)))
+    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 100)))
     model.eval() # Set the model to evaluation mode
 
     results = sample_utility_samples(sample_size = main_args.sample_size)

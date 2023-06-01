@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 import pickle
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -45,6 +45,7 @@ parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40])
+parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=250)
 main_args = parser.parse_args()
 
@@ -210,36 +211,15 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
 
 def utility_sample(dataloader = source_data):
     '''Collect One Utility Sample'''
-    OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
-    return OT_distance, acc
+    if main_args.OT_distance:
+        OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
+        return OT_distance, acc
+    else:
+        return acc
 
 
-def evaluate():
-    '''evaluate new utility samples calculate MSE'''
-    net = torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80))
-    utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
-    criterion = nn.MSELoss()
-    test_loss = 0
-    for dataloader, ot, accuracy in utility_samples:
-            opt_transport_tensor = torch.tensor([ot], device=main_args.device)
-            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
-            for images, labels in dataloader:
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-                    images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1) 
-                    # print(images.shape) 
-                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
 
-            # Compute loss
-                loss = criterion(outputs, accuracy_tensor)
-                test_loss += loss.item()
-    test_loss /= len(utility_samples)
-    print('Test Loss is {}'.format(test_loss))
-    with open('Loss_Evaluate.txt', 'w') as file:
-        file.write(test_loss)
-    return test_loss
-    
 
 
 
@@ -257,12 +237,72 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         # Unlabeled = source_data[0]['Unlabeled']
         # validation = source_data[0]['valid']
         
-        ot, acc = utility_sample(dataloader = source_data)
-        print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
+        if main_args.OT_distance:
+            ot, acc = utility_sample(dataloader = source_data)
+            print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
         
-        results.append([Labeled, ot, acc])
+            results.append([Labeled, ot, acc])
+        else:
+            acc = utility_sample(dataloader = source_data)
+            print('Accuracy: {}'.format(acc))
+        
+            results.append([Labeled, acc])
         
     return results   
+
+
+def evaluate():
+    '''evaluate new utility samples calculate MSE'''
+    criterion = nn.MSELoss()
+    test_loss = 0
+    if main_args.OT_distance:
+        net = torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 80))
+        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        for dataloader, ot, accuracy in utility_samples:
+            opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for images, labels in dataloader:
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
+
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+                test_loss += loss.item()
+        test_loss /= len(utility_samples)
+        print('Test Loss is {}'.format(test_loss))
+        with open('Loss_Evaluate_OT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+            file.write(test_loss)
+        return test_loss
+    else:
+        net = torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 80))
+        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        for dataloader, accuracy in utility_samples:
+            opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for images, labels in dataloader:
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = net(images, opt_transport_tensor).to(device=main_args.device)
+
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+                test_loss += loss.item()
+        test_loss /= len(utility_samples)
+        print('Test Loss is {}'.format(test_loss))
+        with open('Loss_Evaluate_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+            file.write(test_loss)
+        return test_loss
+    
+    
+ 
+    
+    
+    
 def deepset_ot(samples, Epochs = 150):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
@@ -301,10 +341,55 @@ def deepset_ot(samples, Epochs = 150):
     writer.close()
     return
     
+
+def deepset(samples, Epochs = 150):
+    '''ablation study: without OT'''
+    model = DeepSet(in_features=in_dims[main_args.dataset])
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters())
+    writer = SummaryWriter('runs/experiment_1')
+    for epoch in range(Epochs):
+        train_loss = 0
+
+        for dataloader, accuracy in samples:
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for images, labels in dataloader:
+            # Forward pass
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = model(images)
+
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+
+            # Backward pass and optimization
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+        train_loss /= len(samples)
+        if epoch % 10 == 0:
+            print('Epoch {} loss {}'.format(epoch, train_loss))
+        if (epoch+1) % 10 == 0:
+            writer.add_scalar('training loss', loss.item())
+            writer.add_scalar('accuracy', accuracy)
+    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
+    
+    writer.close()
+    return
     
 
+
+
+if main_args.OT_distance:
+    results = sample_utility_samples()
+    deepset_ot(results, Epochs = 200)
+else:
+    results = sample_utility_samples()
+    deepset(results, Epochs = 200)
     
-# deepset_ot(results, Epochs = main_args.Epochs) 
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()
@@ -367,8 +452,7 @@ def concat_dataloader(dataloader1, dataloader2):
     return subset_dataloader
 
 
-results = sample_utility_samples() 
-deepset_ot(results, Epochs = 200)  
+
 
 
 # # results = sample_utility_samples()
