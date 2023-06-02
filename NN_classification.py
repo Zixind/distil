@@ -194,7 +194,7 @@ class SetTransformer(nn.Module):
 class SetTransformer_OT(nn.Module):
     def __init__(self, dim_input, num_outputs = 1, dim_output = 1,
             num_inds=10, dim_hidden=40, num_heads=4, ln=False):    #10 40 4
-        super(SetTransformer_length, self).__init__()
+        super(SetTransformer_OT, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss(reduction = 'sum')
         self.enc = nn.Sequential(
@@ -214,24 +214,7 @@ class SetTransformer_OT(nn.Module):
         else:
             return F.leaky_relu(self.backbone(torch.cat((self.dec(self.enc(X)).view(1,1), ot_distance.view(1,1)), dim = 1)))
     
-    # def calculate_dpp(self, input, distance = False):
-    #     '''gram matrix of embedding x^{T}x x has dim(set_num, self.set_features)'''
-    #     input = input.to(self.device)
-    #     if distance:
-    #         vol = torch.det(1/(1 + torch.cdist(input, input, p = 2))) #adopted from https://arxiv.org/pdf/1905.07697.pdf
-    #     else:
-    #         input = F.normalize(input)  #normalize embedding
-    #         Gram = torch.mm(input, input.t())
-    #         vol = torch.det(Gram)
-        
-    #     return vol.view(1, 1)
     
-    # def length(self, input):
-    #     input = input.to(self.device)
-    #     return torch.Tensor(np.array([input.shape[1]])).view(1,1)
-
-
-
 
 
 #copy from Si Chen

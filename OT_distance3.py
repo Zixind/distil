@@ -193,10 +193,15 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
     if verbose:
         print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
     return round(acc*100, 2)
+
 def utility_sample(dataloader = source_data):
-    OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
+    '''Collect One Utility Sample'''
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
-    return OT_distance, acc
+    if main_args.OT_distance:
+        OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
+        return OT_distance, acc
+    else:
+        return acc
 
 def sample_utility_samples(sample_size = main_args.sample_size):
     results = []
@@ -211,10 +216,16 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         # Unlabeled = source_data[0]['Unlabeled']
         # validation = source_data[0]['valid']
         
-        ot, acc = utility_sample(dataloader = source_data)
-        print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
+        if main_args.OT_distance:
+            ot, acc = utility_sample(dataloader = source_data)
+            print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
         
-        results.append([Labeled, ot, acc])
+            results.append([Labeled, ot, acc])
+        else:
+            acc = utility_sample(dataloader = source_data)
+            print('Accuracy: {}'.format(acc))
+        
+            results.append([Labeled, acc])
         
     return results
     
@@ -324,7 +335,7 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
-        with open('Loss_Evaluate_OT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+        with open('Loss_Evaluate_OT_Net_Trained_on_{}_{}.txt'.format(80, main_args.sample_size), 'w') as file:
             file.write(test_loss)
         return test_loss
     else:
@@ -345,7 +356,7 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
-        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
+        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}_{}.txt'.format(80, main_args.sample_size), 'w') as file:
             file.write(test_loss)
         return test_loss
     
