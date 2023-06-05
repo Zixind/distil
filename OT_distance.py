@@ -44,7 +44,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40])
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=250)
 main_args = parser.parse_args()
@@ -305,6 +305,7 @@ def evaluate():
     
 def deepset_ot(samples, Epochs = 150):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
+    # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
     writer = SummaryWriter('runs/experiment_1')
@@ -336,7 +337,7 @@ def deepset_ot(samples, Epochs = 150):
         if (epoch+1) % 10 == 0:
             writer.add_scalar('training loss', loss.item())
             writer.add_scalar('accuracy', accuracy)
-    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, main_args.sample_size))  
+    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.sample_size))  
     
     writer.close()
     return
@@ -385,10 +386,10 @@ def deepset(samples, Epochs = 150):
 
 if main_args.OT_distance:
     results = sample_utility_samples()
-    deepset_ot(results, Epochs = 200)
+    deepset_ot(results, Epochs = 250)
 else:
     results = sample_utility_samples()
-    deepset(results, Epochs = 200)
+    deepset(results, Epochs = 250)
     
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):

@@ -195,7 +195,7 @@ class SetTransformer_OT(nn.Module):
     def __init__(self, dim_input, num_outputs = 1, dim_output = 1,
             num_inds=10, dim_hidden=40, num_heads=4, ln=False):    #10 40 4
         super(SetTransformer_OT, self).__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss(reduction = 'sum')
         self.enc = nn.Sequential(
                 ISAB(dim_input, dim_hidden, num_heads, num_inds, ln=ln),
@@ -208,7 +208,7 @@ class SetTransformer_OT(nn.Module):
         self.backbone = nn.Linear(2, 1)
 
     def forward(self, X, ot_distance, representation = False):
-        X = X.to(self.device)
+        # X = X.to(self.device)
         if representation:
             return torch.mean(self.enc(X), dim = 1)
         else:
@@ -273,26 +273,26 @@ class DeepSet(nn.Module):
             
 class DeepSet_OT(nn.Module):
 
-    def __init__(self, in_features, set_features=128):
+    def __init__(self, in_features, set_features=512):
         super(DeepSet_OT, self).__init__()
         self.in_features = in_features
         self.out_features = set_features
         self.feature_extractor = nn.Sequential(
-            nn.Linear(in_features, 128),
+            nn.Linear(in_features, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, set_features)
+            nn.Linear(512, set_features)
         )
 
         self.regressor = nn.Sequential(
-            nn.Linear(set_features, 128),
+            nn.Linear(set_features, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, 1),
+            nn.Linear(512, 1),
             nn.Sigmoid()
         )
         
