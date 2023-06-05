@@ -43,7 +43,7 @@ parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Net_trained', type=int, default=80, choices=[50,80,100])
+parser.add_argument('--Net_trained', type=int, default=80, choices=[20,50,80,100])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 70])
 main_args = parser.parse_args()
 
@@ -340,7 +340,9 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
-        with open('Loss_Evaluate_OT_Net_Trained_on_{}_{}.txt'.format(main_args.Net_trained, main_args.sample_size), 'w') as file:
+        now = datetime.datetime.now()
+        timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
+        with open('Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     else:
@@ -363,7 +365,9 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
-        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}_{}.txt'.format(main_args.Net_trained, main_args.sample_size), 'w') as file:
+        now = datetime.datetime.now()
+        timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
+        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     
