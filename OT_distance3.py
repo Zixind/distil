@@ -358,7 +358,7 @@ def evaluate():
                     images = images.mean(dim=1)
                     images = images.view(images.size(0), -1) 
                     # print(images.shape) 
-                outputs = model(images, opt_transport_tensor).to(device=main_args.device)
+                outputs = model(images).to(device=main_args.device)
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
