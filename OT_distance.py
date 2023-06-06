@@ -392,6 +392,10 @@ else:
     deepset(results, Epochs = 250)
     
 
+    
+    
+    
+##### TODO Main Algorithm we want to write: Two Stage Utility Learning #######
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()
     for p in embedder.parameters():
