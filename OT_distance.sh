@@ -1,8 +1,8 @@
 #!/bin/bash
 
-node=w002
+node=a004
 partition=yuxinchen-contrib
-mem=48G
+mem=11G
 initial=20
 dataset='MNIST'
 samplesize=20

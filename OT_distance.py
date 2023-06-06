@@ -46,7 +46,7 @@ parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Epochs', type=int, default=350)
+parser.add_argument('--Epochs', type=int, default=400)
 main_args = parser.parse_args()
 
 
