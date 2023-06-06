@@ -46,7 +46,7 @@ parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Epochs', type=int, default=400)
+parser.add_argument('--Epochs', type=int, default=400, choices=[300, 400, 500, 600, 700])
 main_args = parser.parse_args()
 
 
@@ -386,10 +386,10 @@ def deepset(samples, Epochs = 150):
 
 if main_args.OT_distance:
     results = sample_utility_samples()
-    deepset_ot(results, Epochs = 250)
+    deepset_ot(results, Epochs = main_args.Epochs)
 else:
     results = sample_utility_samples()
-    deepset(results, Epochs = 250)
+    deepset(results, Epochs = main_args.Epochs)
     
 
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
