@@ -44,7 +44,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120])
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]). # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=400, choices=[300, 400, 500, 600, 700])
 main_args = parser.parse_args()
@@ -145,7 +145,7 @@ Labeled = source_data[0]['Labeled']
 # Labeled2 = source_data2[0]['Labeled']
 Unlabeled = source_data[0]['Unlabeled']
 validation = source_data[0]['valid'] #fix validation dataset it will be used over the whole script
-test = source_data[1]['test']     
+# test = source_data[1]['test']     
 
 print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
 
@@ -392,6 +392,10 @@ else:
     deepset(results, Epochs = main_args.Epochs)
     
 
+    
+    
+    
+##### TODO Main Algorithm we want to write: Two Stage Utility Learning #######
 def calc_OT_interpolate(dataloader1, dataloader2, embedder, verbose = 0):
     embedder.fc = torch.nn.Identity()
     for p in embedder.parameters():
