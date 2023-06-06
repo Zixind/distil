@@ -17,6 +17,7 @@ import argparse
 from argparse import ArgumentParser
 
 import pickle
+import os
 import datetime
 
 from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet
@@ -320,6 +321,8 @@ def evaluate():
     criterion = nn.MSELoss()
     test_loss = 0
     if main_args.OT_distance:
+        os.makedirs('{}/OT/Net_Trained_{}_Samples_{}'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), exist_ok = True)
+
         model = DeepSet_OT(in_features=in_dims[main_args.dataset])
         model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.Net_trained)))
         model.eval() # Set the model to evaluation mode
@@ -342,10 +345,12 @@ def evaluate():
         print('Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
-        with open('Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
+        with open('{}/OT/Net_Trained_{}_Samples_{}/Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     else:
+        os.makedirs('{}/NonOT/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
+
         model = DeepSet(in_features=in_dims[main_args.dataset])
         model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained)))
         model.eval() # Set the model to evaluation mode
@@ -367,7 +372,7 @@ def evaluate():
         print('Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
-        with open('Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
+        with open('{}/NonOT/Net_Trained_{}_Samples_{}/Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     
