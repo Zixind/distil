@@ -145,7 +145,7 @@ Labeled = source_data[0]['Labeled']
 # Labeled2 = source_data2[0]['Labeled']
 Unlabeled = source_data[0]['Unlabeled']
 validation = source_data[0]['valid'] #fix validation dataset it will be used over the whole script
-test = source_data[1]['test']     
+# test = source_data[1]['test']     
 
 print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
 
