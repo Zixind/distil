@@ -4,8 +4,8 @@ node=a006
 partition=yuxinchen-contrib
 mem=11G
 initial=20
-dataset='CIFAR10'
-samplesize=20
+dataset='SVHN'
+samplesize=50
 ot_distance=1
 jobname=OT_distance_$samplesize_$dataset
 
