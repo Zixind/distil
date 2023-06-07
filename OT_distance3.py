@@ -77,7 +77,7 @@ Feature_Cost_dim = {
 in_dims = {
     'MNIST': int(28*28),
     'CIFAR10': int(28*28),
-    'SVHN': int(32*32*3)
+    'SVHN': int(32*32)
 }
 
 

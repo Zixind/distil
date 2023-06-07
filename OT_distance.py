@@ -59,7 +59,7 @@ DATASET_SIZES = {
     'MNIST': 28,
     'SVHN': 32,
     'CIFAR10': 28,
-    'USPS': 16
+    'USPS': 28
 }
 
 DATASET_NCLASSES = {
@@ -78,15 +78,23 @@ DATASET_NCLASSES = {
 Feature_Cost_dim = {
     'MNIST': (3, 28, 28),
     'CIFAR10': (3, 28, 28),
-    'SVHN': (3, 32, 32)       
+    'SVHN': (3, 32, 32),
+    'USPS': (3, 32, 32)       
 }
 
 in_dims = {
     'MNIST': int(28*28),
     'CIFAR10': int(28*28),
-    'SVHN': int(32*32)    #apply mean before inputing to deepsets model
+    'SVHN': int(32*32),    #apply mean before inputing to deepsets model
+    'USPS': int(32*32)
 }
 
+# to3channel = {
+#     'MNIST': True,
+#     'CIFAR10': True,
+#     'SVHN': True,    #apply mean before inputing to deepsets model
+#     'USPS': False
+# }
 
 dtst = main_args.dataset
 
@@ -138,7 +146,7 @@ load_data_dict = {
 
 # print("CUDA is available:", torch.cuda.is_available())
 
-source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500)
+source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500, batch_size=64)  #batch_size=64,
 # source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
 
 Labeled = source_data[0]['Labeled']
