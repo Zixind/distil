@@ -354,6 +354,8 @@ def deepset_ot(samples, Epochs = 150):
 def deepset(samples, Epochs = 150):
     '''ablation study: without OT'''
     model = DeepSet(in_features=in_dims[main_args.dataset])
+    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
+    model.eval()
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
     writer = SummaryWriter('runs/experiment_1')

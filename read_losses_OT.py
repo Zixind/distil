@@ -1,6 +1,8 @@
 import os
 import argparse
 import statistics
+import matplotlib.pyplot as plt
+
 
 
 parser = argparse.ArgumentParser()
@@ -29,8 +31,27 @@ def read_loss(Net_trained, sample_size, dataset = 'CIFAR10'):
 
     return average, stddev
 
+# for net_trained in [20,50,80,100]:
+#     print('For Net Trained with collect samples: ', net_trained)
+#     for sample_size in [10, 20, 50, 100]:
+#         read_loss(Net_trained = net_trained, sample_size = sample_size)
+#     print('Done for one fixed sample size')
+
+average_losses = {}
+
 for net_trained in [20,50,80,100]:
-    print('For Net Trained with collect samples: ', net_trained)
-    for sample_size in [10, 20, 50, 100]:
-        read_loss(Net_trained = net_trained, sample_size = sample_size)
-    print('Done for one fixed sample size')
+    average_losses[net_trained] = []
+    # for sample_size in [10, 20, 50, 100]:
+    sample_size = 100
+    average, stddev = read_loss(Net_trained = net_trained, sample_size = sample_size)
+    average_losses[net_trained].append(average)
+
+# Plot the average loss values
+for net_trained, losses in average_losses.items():
+    plt.plot([100], losses, label=f'Number of Utility Samples for DeepSets_OT Training: {net_trained}')
+
+plt.xlabel('Number of Utility Samples for evaluation')
+plt.ylabel('Average MSEs')
+plt.legend(fontsize = 8)
+plt.savefig('Average Loss vs. Sample Size for Dataset {}.png'.format(main_args.dataset))
+plt.show()

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-node=a001
+node=r004
 partition=yuxinchen-contrib
-mem=11G
+mem=48G
 initial=20
-dataset='SVHN'
-samplesize=20
-ot_distance=1
+dataset='CIFAR10'
+samplesize=100
+ot_distance=0
 jobname=OT_distance_$samplesize_$dataset
 
 
