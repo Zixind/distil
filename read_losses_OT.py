@@ -25,11 +25,12 @@ def read_loss(Net_trained, sample_size, dataset = 'CIFAR10'):
 
     average = sum(losses) / len(losses)
     stddev = statistics.stdev(losses)  # Calculate standard deviation
+    size = len(losses)
 
     print('The average is:', average)
     # print('The standard deviation is:', stddev)
 
-    return average, stddev
+    return average, stddev, size
 
 # for net_trained in [20,50,80,100]:
 #     print('For Net Trained with collect samples: ', net_trained)
@@ -41,17 +42,23 @@ average_losses = {}
 
 for net_trained in [20,50,80,100]:
     average_losses[net_trained] = []
-    # for sample_size in [10, 20, 50, 100]:
-    sample_size = 100
-    average, stddev = read_loss(Net_trained = net_trained, sample_size = sample_size)
+    average_cum = 0
+    sizes_cum = 0
+    for sample_size in [10, 20, 50, 100]:
+    # sample_size = 100
+        average, stddev, size = read_loss(Net_trained = net_trained, sample_size = sample_size)
+        average_cum += average * size
+        sizes_cum += size
+    average = average_cum/sizes_cum
     average_losses[net_trained].append(average)
 
-# Plot the average loss values
-for net_trained, losses in average_losses.items():
-    plt.plot([100], losses, label=f'Number of Utility Samples for DeepSets_OT Training: {net_trained}')
+print(average_losses)
+# # Plot the average loss values
+# for net_trained, losses in average_losses.items():
+#     plt.plot([10, 20, 50, 100], losses, label=f'Number of Utility Samples for DeepSets_OT Training: {net_trained}')
 
-plt.xlabel('Number of Utility Samples for evaluation')
-plt.ylabel('Average MSEs')
-plt.legend(fontsize = 8)
-plt.savefig('Average Loss vs. Sample Size for Dataset {}.png'.format(main_args.dataset))
-plt.show()
+# plt.xlabel('Number of Utility Samples for evaluation')
+# plt.ylabel('Average MSEs')
+# plt.legend(fontsize = 8)
+# plt.savefig('Average Loss vs. Sample Size for Dataset {}.png'.format(main_args.dataset))
+# plt.show()

@@ -214,7 +214,24 @@ class SetTransformer_OT(nn.Module):
         else:
             return F.leaky_relu(self.backbone(torch.cat((self.dec(self.enc(X)).view(1,1), ot_distance.view(1,1)), dim = 1)))
     
-    
+
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+# Define the model
+class OT_Net(nn.Module):
+    def __init__(self, input_size = 1):
+        super(OT_Net, self).__init__()
+        self.fc1 = nn.Linear(input_size, 50)  # First fully connected layer
+        self.fc2 = nn.Linear(50, input_size)  # Second fully connected layer
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+   
 
 
 #copy from Si Chen

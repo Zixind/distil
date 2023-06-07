@@ -357,7 +357,7 @@ def deepset(samples, Epochs = 150):
     model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     model.eval()
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     writer = SummaryWriter('runs/experiment_1')
     for epoch in range(Epochs):
         train_loss = 0

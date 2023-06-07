@@ -1,6 +1,6 @@
 #!/bin/bash
 
-node=r004
+node=b002
 partition=yuxinchen-contrib
 mem=48G
 initial=20
