@@ -1,5 +1,7 @@
 import os
 import argparse
+import statistics
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='CIFAR10', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
@@ -9,30 +11,23 @@ main_args = parser.parse_args()
 
 
 def read_loss(Net_trained, sample_size, dataset = 'CIFAR10'):
-# Let's say your files are in the directory 'dir_path'
     dir_path = '{}/OT/Net_Trained_{}_Samples_{}'.format(dataset, Net_trained, sample_size)
-
-# Get a list of all files in the directory
     files = os.listdir(dir_path)
 
-# Initialize a variable to hold the sum of all values
-    total = 0
+    losses = [] # List to store all losses
 
-# Loop over all files
     for file_name in files:
         with open(os.path.join(dir_path, file_name), 'r') as file:
-        # Read the contents of the file
             contents = file.read()
+            losses.append(float(contents))  # Store each loss in the list
 
-        # Convert the contents to a float and add to total
-            total += float(contents)
-
-# Compute the average
-    average = total / len(files)
+    average = sum(losses) / len(losses)
+    stddev = statistics.stdev(losses)  # Calculate standard deviation
 
     print('The average is:', average)
+    # print('The standard deviation is:', stddev)
 
-    return average
+    return average, stddev
 
 for net_trained in [20,50,80,100]:
     print('For Net Trained with collect samples: ', net_trained)
