@@ -20,7 +20,7 @@ import pickle
 import os
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -45,6 +45,7 @@ parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Net_trained', type=int, default=80, choices=[20,50,80,100])
+parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 70, 120])
 main_args = parser.parse_args()
 
@@ -205,7 +206,7 @@ def utility_sample(dataloader = source_data):
     else:
         return acc
 
-def sample_utility_samples(sample_size = main_args.sample_size):
+def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = main_args.OT_distance_only):
     results = []
     
     for _ in range(sample_size):
@@ -218,7 +219,11 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         # Unlabeled = source_data[0]['Unlabeled']
         # validation = source_data[0]['valid']
         
-        if main_args.OT_distance:
+        if main_args.OT_distance_only:
+            ot, acc = utility_sample(dataloader = source_data)
+            print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
+            results.append([ot, acc])
+        elif main_args.OT_distance:
             ot, acc = utility_sample(dataloader = source_data)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
         
@@ -320,7 +325,34 @@ def evaluate():
     '''evaluate new utility samples calculate MSE'''
     criterion = nn.MSELoss()
     test_loss = 0
-    if main_args.OT_distance:
+    if main_args.OT_distance_only:
+        os.makedirs('{}/OT_only/Net_Trained_{}_Samples_{}'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), exist_ok = True)
+
+        model = OT_Net(input_size = 1)
+        model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.Net_trained)))
+        model.eval() # Set the model to evaluation mode
+        
+        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        for ot, accuracy in utility_samples:
+            opt_transport_tensor = torch.tensor([[ot]], device=main_args.device)
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            for ot_distance, accuracy in utility_samples:
+                accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            
+                outputs = model(torch.tensor([[ot_distance]], device=main_args.device))
+
+
+                # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+                test_loss += loss.item()
+        test_loss /= len(utility_samples)
+        print('Test Loss is {}'.format(test_loss))
+        now = datetime.datetime.now()
+        timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
+        with open('{}/OT_only/Net_Trained_{}_Samples_{}/Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
+            file.write(str(test_loss))
+        return test_loss
+    elif main_args.OT_distance:
         os.makedirs('{}/OT/Net_Trained_{}_Samples_{}'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), exist_ok = True)
 
         model = DeepSet_OT(in_features=in_dims[main_args.dataset])

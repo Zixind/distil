@@ -290,7 +290,7 @@ def evaluate():
         with open('Loss_Evaluate_OT_Net_Trained_on_{}.txt'.format(80), 'w') as file:
             file.write(test_loss)
         return test_loss
-    else:
+    elif not main_args.OT_distance_only:
         net = torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 80))
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
         for dataloader, accuracy in utility_samples:
