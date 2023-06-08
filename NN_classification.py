@@ -216,9 +216,6 @@ class SetTransformer_OT(nn.Module):
     
 
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
 
 # Define the model
 class OT_Net(nn.Module):
