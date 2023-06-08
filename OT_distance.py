@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 import pickle
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -46,6 +46,7 @@ parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]) # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
+parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700])
 main_args = parser.parse_args()
 
@@ -226,6 +227,7 @@ def utility_sample(dataloader = source_data):
         return OT_distance, acc
     else:
         return acc
+    
 
 
 
@@ -233,7 +235,7 @@ def utility_sample(dataloader = source_data):
 
 
 
-def sample_utility_samples(sample_size = main_args.sample_size):
+def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = False):
     results = []
     
     for _ in range(sample_size):
@@ -246,11 +248,14 @@ def sample_utility_samples(sample_size = main_args.sample_size):
         # Unlabeled = source_data[0]['Unlabeled']
         # validation = source_data[0]['valid']
         
+        
         if main_args.OT_distance:
             ot, acc = utility_sample(dataloader = source_data)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
-        
-            results.append([Labeled, ot, acc])
+            if ot_distance_only:
+                results.append([ot, acc])
+            else:
+                results.append([Labeled, ot, acc])
         else:
             acc = utility_sample(dataloader = source_data)
             print('Accuracy: {}'.format(acc))
@@ -393,12 +398,50 @@ def deepset(samples, Epochs = 150):
     return
     
 
+def ot(samples, Epochs = 200):
+    '''ablation study: with OT and without data'''
+    model = OT_Net(input_size = 1)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    writer = SummaryWriter('runs/experiment_1')
+    for epoch in range(Epochs):
+        train_loss = 0
+
+        for ot_distance, accuracy in samples:
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            
+            outputs = model(torch.tensor([[ot_distance]], device=main_args.device))
 
 
-if main_args.OT_distance:
+            # Compute loss
+            loss = criterion(outputs, accuracy_tensor)
+
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        train_loss /= len(samples)
+        if epoch % 10 == 0:
+            print('Epoch {} loss {}'.format(epoch, train_loss))
+        if (epoch+1) % 10 == 0:
+            writer.add_scalar('training loss', loss.item())
+            writer.add_scalar('accuracy', accuracy)
+    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.sample_size))  
+    
+    writer.close()
+    return
+    
+
+if main_args.OT_distance_only:  #ablation study
+    print('Ablation Study: OT distance only')
+    results = sample_utility_samples(ot_distance_only=True)
+    ot(results, Epochs = main_args.Epochs)
+elif main_args.OT_distance:
     results = sample_utility_samples()
     deepset_ot(results, Epochs = main_args.Epochs)
-else:
+else: #ablation study
+    print('Ablation Study: Image Data only')
     results = sample_utility_samples()
     deepset(results, Epochs = main_args.Epochs)
     

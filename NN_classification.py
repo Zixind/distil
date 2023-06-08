@@ -227,7 +227,7 @@ class OT_Net(nn.Module):
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = self.fc2(x)
-        return x
+        return x.view(1,1)
    
 
 
