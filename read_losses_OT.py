@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default='CIFAR10', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
+parser.add_argument('--dataset', type=str, default='SVHN', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
 parser.add_argument('--Net_trained', type=int, default=100, choices=[20,50,80,100])
 parser.add_argument('--sample_size', type=int, default=100, choices=[5, 10, 20, 30, 100, 50, 80, 70, 120])
 main_args = parser.parse_args()
 
 
-def read_loss(Net_trained, sample_size, dataset = 'CIFAR10'):
+def read_loss(Net_trained, sample_size, dataset = main_args.dataset):
     dir_path = '{}/OT/Net_Trained_{}_Samples_{}'.format(dataset, Net_trained, sample_size)
     files = os.listdir(dir_path)
 
@@ -24,7 +24,10 @@ def read_loss(Net_trained, sample_size, dataset = 'CIFAR10'):
             losses.append(float(contents))  # Store each loss in the list
 
     average = sum(losses) / len(losses)
-    stddev = statistics.stdev(losses)  # Calculate standard deviation
+    try:
+        stddev = statistics.stdev(losses)  # Calculate standard deviation
+    except:
+        stddev = 0
     size = len(losses)
 
     print('The average is:', average)
@@ -44,11 +47,12 @@ for net_trained in [20,50,80,100]:
     average_losses[net_trained] = []
     average_cum = 0
     sizes_cum = 0
-    for sample_size in [10, 20, 50, 100]:
-    # sample_size = 100
-        average, stddev, size = read_loss(Net_trained = net_trained, sample_size = sample_size)
-        average_cum += average * size
-        sizes_cum += size
+    # for sample_size in [10, 20, 50, 100]:
+    sample_size = 100
+        
+    average, stddev, size = read_loss(Net_trained = net_trained, sample_size = sample_size)
+    average_cum += average * size
+    sizes_cum += size
     average = average_cum/sizes_cum
     average_losses[net_trained].append(average)
 
