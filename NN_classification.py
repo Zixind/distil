@@ -253,8 +253,8 @@ class DeepSet(nn.Module):
             nn.ELU(inplace=True),
             nn.Linear(128, 128),
             nn.ELU(inplace=True),
-            nn.Linear(128, 1),
-            nn.Sigmoid()
+            nn.Linear(128, 1)
+            # nn.Sigmoid()
         )
         
 

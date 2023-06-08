@@ -49,6 +49,7 @@ parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700])
 main_args = parser.parse_args()
 
+## MNIST: Epochs = 700
 
 
 ## Below are for Pretraining network
