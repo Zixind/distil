@@ -7,7 +7,7 @@ initial=20
 dataset='SVHN'
 samplesize=100
 ot_distance=1
-net_trained=80
+net_trained=50
 jobname=OT_distance_$net_trained_$samplesize
 
 
