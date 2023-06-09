@@ -323,6 +323,7 @@ def deepset_ot(samples, Epochs = 150):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
     writer = SummaryWriter('runs/experiment_1')
+    print('DeepSet + OT')
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -365,6 +366,7 @@ def deepset(samples, Epochs = 150):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     writer = SummaryWriter('runs/experiment_1')
+    print('Ablation Study deepset only')
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -404,6 +406,7 @@ def ot(samples, Epochs = 200):
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     writer = SummaryWriter('runs/experiment_1')
+    print('Ablation Study OT only')
     for epoch in range(Epochs):
         train_loss = 0
 
