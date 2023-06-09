@@ -1,14 +1,14 @@
 #!/bin/bash
 
-node=a002
+node=a003
 partition=yuxinchen-contrib
 mem=11G
 initial=20
 dataset='MNIST'
-samplesize=20
+samplesize=50
 ot_distance=1
 ot_distance_only=0
-net_trained=80
+net_trained=100
 jobname=OT_distance_$net_trained_$samplesize
 
 

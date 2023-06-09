@@ -1,13 +1,13 @@
 #!/bin/bash
 
-node=a002
+node=r004
 partition=yuxinchen-contrib
-mem=11G
+mem=48G
 initial=20
-dataset='MNIST'
-samplesize=20
-ot_distance=1
-ot_distance_only=1
+dataset='SVHN'
+samplesize=50
+ot_distance=0
+ot_distance_only=0
 jobname=OT_$ot_distance_$samplesize_$dataset
 epochs=700
 
