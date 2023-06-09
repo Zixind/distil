@@ -317,12 +317,12 @@ def evaluate():
     
     
     
-def deepset_ot(samples, Epochs = 150):
+def deepset_ot(samples, Epochs = 150, tolerance = 5):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters())
-    writer = SummaryWriter('runs/experiment_1')
+    writer = SummaryWriter('runs/DeepSet_OT')
     print('DeepSet + OT')
     for epoch in range(Epochs):
         train_loss = 0
@@ -349,6 +349,8 @@ def deepset_ot(samples, Epochs = 150):
         train_loss /= len(samples)
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
+        if train_loss <= tolerance:
+            break
         if (epoch+1) % 10 == 0:
             writer.add_scalar('training loss', loss.item())
             writer.add_scalar('accuracy', accuracy)
@@ -358,14 +360,14 @@ def deepset_ot(samples, Epochs = 150):
     return
     
 
-def deepset(samples, Epochs = 150):
+def deepset(samples, Epochs = 150, tolerance  = 5):
     '''ablation study: without OT'''
     model = DeepSet(in_features=in_dims[main_args.dataset])
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     # model.eval()
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
-    writer = SummaryWriter('runs/experiment_1')
+    writer = SummaryWriter('runs/DeepSet_only')
     print('Ablation Study deepset only')
     for epoch in range(Epochs):
         train_loss = 0
@@ -389,6 +391,8 @@ def deepset(samples, Epochs = 150):
                 optimizer.step()
                 train_loss += loss.item()
         train_loss /= len(samples)
+        if train_loss <= tolerance:
+            break
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         if (epoch+1) % 10 == 0:
@@ -400,12 +404,12 @@ def deepset(samples, Epochs = 150):
     return
     
 
-def ot(samples, Epochs = 200):
+def ot(samples, Epochs = 200, tolerance = 5):
     '''ablation study: with OT and without data'''
     model = OT_Net(input_size = 1)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
-    writer = SummaryWriter('runs/experiment_1')
+    writer = SummaryWriter('runs/OT_only')
     print('Ablation Study OT only')
     for epoch in range(Epochs):
         train_loss = 0
@@ -425,6 +429,8 @@ def ot(samples, Epochs = 200):
             optimizer.step()
             train_loss += loss.item()
         train_loss /= len(samples)
+        if train_loss <= tolerance:
+            break
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         if (epoch+1) % 10 == 0:
