@@ -1,14 +1,14 @@
 #!/bin/bash
 
-node=j003
+node=w001
 partition=yuxinchen-contrib
 mem=48G
 initial=20
 dataset='SVHN'
 samplesize=100
-ot_distance=0
-ot_distance_only=0
-net_trained=50
+ot_distance=1
+ot_distance_only=1
+net_trained=100
 jobname=OT_distance_$net_trained_$samplesize
 
 

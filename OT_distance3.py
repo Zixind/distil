@@ -344,6 +344,7 @@ def evaluate():
 
                 # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
+                print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
@@ -372,6 +373,7 @@ def evaluate():
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
+                print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))
@@ -399,6 +401,7 @@ def evaluate():
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
+                print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('Test Loss is {}'.format(test_loss))

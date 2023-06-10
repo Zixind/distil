@@ -317,7 +317,7 @@ def evaluate():
     
     
     
-def deepset_ot(samples, Epochs = 150, tolerance = 5):
+def deepset_ot(samples, Epochs = 150, tolerance = 10):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
@@ -360,7 +360,7 @@ def deepset_ot(samples, Epochs = 150, tolerance = 5):
     return
     
 
-def deepset(samples, Epochs = 150, tolerance  = 5):
+def deepset(samples, Epochs = 150, tolerance  = 10):
     '''ablation study: without OT'''
     model = DeepSet(in_features=in_dims[main_args.dataset])
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
@@ -404,7 +404,7 @@ def deepset(samples, Epochs = 150, tolerance  = 5):
     return
     
 
-def ot(samples, Epochs = 200, tolerance = 5):
+def ot(samples, Epochs = 200, tolerance = 10):
     '''ablation study: with OT and without data'''
     model = OT_Net(input_size = 1)
     criterion = nn.MSELoss()
