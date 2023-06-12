@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 import pickle
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net, DeepSet_Sigmoid
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -47,7 +47,9 @@ parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu']
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]) # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700])
+parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700, 800])
+parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether project into values between [0,1]     1 = True
+
 main_args = parser.parse_args()
 
 ## MNIST: Epochs = 700
@@ -196,7 +198,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 # calc_OT(source_data[0], embedder = resnet18(pretrained=True).eval())
 
 
-def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True):    
+def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True, sigmoid = main_args.Sigmoid):    
     '''Get accuracy on randomized/non_randomized validation set'''
     args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
@@ -215,13 +217,16 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
 
     if verbose:
         print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
-    return round(acc*100, 2)
+    if not sigmoid:
+        return round(acc*100, 2)
+    else:
+        return acc
 
 # get_acc_dataloader(source_data, model=ResNet18(num_classes=10))
 
-def utility_sample(dataloader = source_data):
+def utility_sample(dataloader = source_data, sigmoid = main_args.Sigmoid):
     '''Collect One Utility Sample'''
-    acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
+    acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model], sigmoid = sigmoid)
     if main_args.OT_distance:
         OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
         return OT_distance, acc
@@ -362,7 +367,11 @@ def deepset_ot(samples, Epochs = 150, tolerance = 10):
 
 def deepset(samples, Epochs = 150, tolerance  = 10):
     '''ablation study: without OT'''
-    model = DeepSet(in_features=in_dims[main_args.dataset])
+    if main_args.Sigmoid:
+        model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
+    else:
+        model = DeepSet(in_features=in_dims[main_args.dataset])
+    
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     # model.eval()
     criterion = nn.MSELoss()
@@ -398,8 +407,11 @@ def deepset(samples, Epochs = 150, tolerance  = 10):
         if (epoch+1) % 10 == 0:
             writer.add_scalar('training loss', loss.item())
             writer.add_scalar('accuracy', accuracy)
-    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
-    
+    if not main_args.Sigmoid:
+        torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
+    else:
+        torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_Sigmoid.pth'.format(main_args.dataset, main_args.sample_size))  
+
     writer.close()
     return
     
@@ -443,14 +455,12 @@ def ot(samples, Epochs = 200, tolerance = 10):
     
 
 if main_args.OT_distance_only:  #ablation study
-    print('Ablation Study: OT distance only')
     results = sample_utility_samples(ot_distance_only=True)
     ot(results, Epochs = main_args.Epochs)
 elif main_args.OT_distance:
     results = sample_utility_samples()
     deepset_ot(results, Epochs = main_args.Epochs)
 else: #ablation study
-    print('Ablation Study: Image Data only')
     results = sample_utility_samples()
     deepset(results, Epochs = main_args.Epochs)
     

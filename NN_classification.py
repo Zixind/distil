@@ -285,6 +285,60 @@ class DeepSet(nn.Module):
             + 'Feature Exctractor=' + str(self.feature_extractor) \
             + '\n Set Feature' + str(self.regressor) + ')'
             
+
+class DeepSet_Sigmoid(nn.Module):
+
+    def __init__(self, in_features, set_features=128):
+        super(DeepSet_Sigmoid, self).__init__()
+        self.in_features = in_features
+        self.out_features = set_features
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(in_features, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, set_features)
+        )
+
+        self.regressor = nn.Sequential(
+            nn.Linear(set_features, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
+        )
+        
+
+        self.add_module('0', self.feature_extractor)
+        self.add_module('1', self.regressor)
+        
+        
+    def reset_parameters(self):
+        for module in self.children():
+            reset_op = getattr(module, "reset_parameters", None)
+            if callable(reset_op):
+                reset_op()
+            
+    def forward(self, input, representation = False):
+        # Flatten the images into vectors
+    
+        x = self.feature_extractor(input)
+        # x = x.sum(dim=1)
+        x = x.sum(dim=0).unsqueeze(0)
+        if representation:
+            return x
+        else:
+            y = self.regressor(x)
+            return y.view(1,1)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'Feature Exctractor=' + str(self.feature_extractor) \
+            + '\n Set Feature' + str(self.regressor) + ')'
+             
 class DeepSet_OT(nn.Module):
 
     def __init__(self, in_features, set_features=512):

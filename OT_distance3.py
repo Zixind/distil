@@ -20,7 +20,7 @@ import pickle
 import os
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net, DeepSet_Sigmoid
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -47,6 +47,8 @@ parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Net_trained', type=int, default=80, choices=[20,50,80,100])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 70, 120])
+parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether project into values between [0,1]     1 = True
+
 main_args = parser.parse_args()
 
 DATASET_SIZES = {
@@ -177,7 +179,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 # calc_OT(source_data[0], embedder = resnet18(pretrained=True).eval())
 
 
-def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True):    
+def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True, sigmoid = main_args.Sigmoid):    
     args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
 
@@ -195,11 +197,14 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
 
     if verbose:
         print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
-    return round(acc*100, 2)
+    if not sigmoid:
+        return round(acc*100, 2)
+    else:
+        return acc
 
-def utility_sample(dataloader = source_data):
+def utility_sample(dataloader = source_data, sigmoid = main_args.Sigmoid):
     '''Collect One Utility Sample'''
-    acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model])
+    acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model], sigmoid = sigmoid)
     if main_args.OT_distance:
         OT_distance = calc_OT(dataloader[0], embedder = resnet18(pretrained=True).eval())
         return OT_distance, acc
@@ -347,7 +352,7 @@ def evaluate():
                 print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
-        print('Test Loss is {}'.format(test_loss))
+        print('OT Only Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
         with open('{}/OT_only/Net_Trained_{}_Samples_{}/Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
@@ -376,18 +381,25 @@ def evaluate():
                 print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
-        print('Test Loss is {}'.format(test_loss))
+        print('DeepSets OT Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
         with open('{}/OT/Net_Trained_{}_Samples_{}/Loss_Evaluate_OT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     else:
-        os.makedirs('{}/NonOT/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
+        if main_args.Sigmoid == False:
+            os.makedirs('{}/NonOT/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
 
-        model = DeepSet(in_features=in_dims[main_args.dataset])
-        model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained)))
-        model.eval() # Set the model to evaluation mode
+            model = DeepSet(in_features=in_dims[main_args.dataset])
+            model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained)))
+            model.eval() # Set the model to evaluation mode
+        else:
+            os.makedirs('{}/NonOT_Sigmoid/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
+
+            model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
+            model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet_Sigmoid.pth'.format(main_args.dataset, main_args.Net_trained)))
+            model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
         for dataloader, accuracy in utility_samples:
@@ -404,7 +416,7 @@ def evaluate():
                 print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
-        print('Test Loss is {}'.format(test_loss))
+        print('DeepSets Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
         with open('{}/NonOT/Net_Trained_{}_Samples_{}/Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
