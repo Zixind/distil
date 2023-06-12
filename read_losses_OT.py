@@ -2,6 +2,7 @@ import os
 import argparse
 import statistics
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 
@@ -43,9 +44,12 @@ def read_loss(Net_trained, sample_size, dataset = main_args.dataset):
 
 def calc_avg_losses(dataset = 'CIFAR10'):
     average_losses = {}
+    stddev_losses = {}
+
 
     for net_trained in [20,50,80,100]:
         average_losses[net_trained] = []
+        stddev_losses[net_trained] = []
         average_cum = 0
         sizes_cum = 0
         # for sample_size in [10, 20, 50, 100]:
@@ -56,37 +60,80 @@ def calc_avg_losses(dataset = 'CIFAR10'):
         sizes_cum += size
         average = average_cum/sizes_cum
         average_losses[net_trained].append(average)
+        stddev_losses[net_trained].append(stddev)
 
     print(average_losses)
-    return average_losses
+    return average_losses, stddev_losses
 
 
-def plot_avg_losses(average_losses, dataset, ax):
-    # Iterate over each net_trained and its corresponding average losses
-    net_trained, avg_losses = zip(*average_losses.items())
+
+
+# define the plotting function
+def plot_avg_std_losses(average_losses_dict, stddev_losses_dict, datasets):
+    fig, ax = plt.subplots()
+
+    # define the different markers for each dataset
+    markers = ['o', 's', 'd']
+    net_trained_values = [20,50,80,100]
+
+    # iterate over the datasets
+    for idx, dataset in enumerate(datasets):
+        average_losses = average_losses_dict[dataset]
+        stddev_losses = stddev_losses_dict[dataset]
+
+        avg_losses = [average_losses[net_trained][0] for net_trained in net_trained_values]
+        std_losses = [stddev_losses[net_trained][0] for net_trained in net_trained_values]
+
+        # plot averages with error bars
+        ax.errorbar(net_trained_values, avg_losses, yerr=std_losses, marker=markers[idx], label=f'{dataset}', capsize=5)
+
+    ax.set_title(f'Average Losses of DeepSets + OT and Standard Deviation')
+    ax.set_xlabel('Net Trained')
+    ax.set_ylabel('Loss')
+    ax.legend()
+    plt.savefig('Average Loss vs. Sample Size.png')
+    plt.show()
     
-    ax.plot(net_trained, avg_losses, label=dataset)
 
-# List of datasets
+# Call function
 datasets = ['CIFAR10', 'MNIST', 'SVHN']
+average_losses_dict = {}
+stddev_losses_dict = {}
 
-# Create a new figure and axis
-fig, ax = plt.subplots()
-
-# For each dataset
 for dataset in datasets:
-    # Calculate average losses
-    average_losses = calc_avg_losses(dataset)
+    average_losses, stddev_losses = calc_avg_losses(dataset=dataset)
+    average_losses_dict[dataset] = average_losses
+    stddev_losses_dict[dataset] = stddev_losses
 
-    # Plot average losses on the given axis
-    plot_avg_losses(average_losses, dataset, ax)
+plot_avg_std_losses(average_losses_dict, stddev_losses_dict, datasets)
 
-ax.set_title('Average Losses')  # Set title
-ax.set_xlabel('Sample Size')  # Set x-axis label
-ax.set_ylabel('Average Loss')  # Set y-axis label
-ax.legend()  # Show legend
-plt.savefig('Average Loss vs. Sample Size.png')
-plt.show()  # Display the plot
+
+# def plot_avg_losses(average_losses, dataset, ax):
+#     # Iterate over each net_trained and its corresponding average losses
+#     net_trained, avg_losses = zip(*average_losses.items())
+    
+#     ax.plot(net_trained, avg_losses, label=dataset)
+
+# # List of datasets
+# datasets = ['CIFAR10', 'MNIST', 'SVHN']
+
+# # Create a new figure and axis
+# fig, ax = plt.subplots()
+
+# # For each dataset
+# for dataset in datasets:
+#     # Calculate average losses
+#     average_losses = calc_avg_losses(dataset)
+
+#     # Plot average losses on the given axis
+#     plot_avg_losses(average_losses, dataset, ax)
+
+# ax.set_title('Average Losses')  # Set title
+# ax.set_xlabel('Sample Size')  # Set x-axis label
+# ax.set_ylabel('Average Loss')  # Set y-axis label
+# ax.legend()  # Show legend
+# plt.savefig('Average Loss vs. Sample Size.png')
+# plt.show()  # Display the plot
 
 
 

@@ -47,7 +47,7 @@ parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu']
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]) # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700, 800])
+parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700, 800, 1000])
 parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether project into values between [0,1]     1 = True
 
 main_args = parser.parse_args()
@@ -326,7 +326,10 @@ def deepset_ot(samples, Epochs = 150, tolerance = 10):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters())
+    if main_args.dataset == 'MNIST':
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
     writer = SummaryWriter('runs/DeepSet_OT')
     print('DeepSet + OT')
     for epoch in range(Epochs):

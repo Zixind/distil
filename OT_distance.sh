@@ -4,13 +4,13 @@ node=a001
 partition=yuxinchen-contrib
 mem=11G
 initial=20
-dataset='MNIST'
+dataset='CIFAR10'
 samplesize=20
 ot_distance=1
 ot_distance_only=0
 jobname=OT_$ot_distance_$samplesize_$dataset
 epochs=800
-sigmoid=1
+sigmoid=0
 
 
 
