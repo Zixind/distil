@@ -44,7 +44,7 @@ parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
-parser.add_argument('--Net_trained', type=int, default=80, choices=[20,50,80,100])
+parser.add_argument('--Net_trained', type=int, default=80, choices=[10,20,50,80,100])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 70, 120])
 parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether project into values between [0,1]     1 = True
@@ -142,7 +142,7 @@ Unlabeled = source_data[0]['Unlabeled']
 validation = source_data[0]['valid'] #fix validation dataset
 test = source_data[1]['test']     
 
-print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
+print('Dataset: {} Acquisition: {} Net Trained {}'.format(src_dataset, main_args.acquisition, main_args.Net_trained))
 
 # Embed using a pretrained (+frozen) resnet
 # embedder = resnet18(pretrained=True).eval()
@@ -324,12 +324,65 @@ def deepset_ot(samples, Epochs = 150):
 #         file.write(str(test_loss))
 #     return test_loss
            
+def deepset(samples, Epochs = 150, tolerance  = 1):
+    '''ablation study: without OT'''
+    if main_args.Sigmoid:
+        model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
+    else:
+        model = DeepSet_cifar(in_features=in_dims[main_args.dataset])
+    
+    # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
+    # model.eval()
+    criterion = nn.MSELoss()
+    
+    if main_args.dataset == 'SVHN':
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    writer = SummaryWriter('runs/DeepSet_only')
+    print('Ablation Study deepset only')
+    
+    for epoch in range(Epochs):
+        train_loss = 0
 
+        for dataloader, accuracy in samples:
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            
+            for images, labels in dataloader:
+            # Forward pass
+                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                    images = images.mean(dim=1)
+                    images = images.view(images.size(0), -1) 
+                    # print(images.shape) 
+                outputs = model(images)
+            # Compute loss
+                loss = criterion(outputs, accuracy_tensor)
+            # Backward pass and optimization
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+        train_loss /= len(samples)
+        if train_loss <= tolerance:
+            print('Training Loss: ', train_loss)
+            break
+        if epoch % 10 == 0:
+            print('Epoch {} loss {}'.format(epoch, train_loss))
+        if (epoch+1) % 10 == 0:
+            writer.add_scalar('training loss', loss.item())
+            writer.add_scalar('accuracy', accuracy)
+    if not main_args.Sigmoid:
+        torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
+    else:
+        torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_Sigmoid.pth'.format(main_args.dataset, main_args.sample_size))  
+    writer.close()
+    return
 
 def evaluate():
     '''evaluate new utility samples calculate MSE'''
     criterion = nn.MSELoss()
     test_loss = 0
+    
     if main_args.OT_distance_only:
         os.makedirs('{}/OT_only/Net_Trained_{}_Samples_{}'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), exist_ok = True)
 
@@ -402,14 +455,18 @@ def evaluate():
             model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        true_values = []
+        predicted_values = []
         for dataloader, accuracy in utility_samples:
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            true_values.append(accuracy)
             for images, labels in dataloader:
                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
                     images = images.mean(dim=1)
                     images = images.view(images.size(0), -1) 
                     # print(images.shape) 
                 outputs = model(images).to(device=main_args.device)
+                predicted_values.append(outputs.item())
 
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
@@ -417,21 +474,146 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('DeepSets Test Loss is {}'.format(test_loss))
+        with open('Evalualtion_deepset_predicted_vs_true_{}_{}_{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), 'w') as file:
+            for true, predicted in zip(true_values, predicted_values):
+                file.write(f"{true}, {predicted}\n")
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
         with open('{}/NonOT/Net_Trained_{}_Samples_{}/Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
         return test_loss
     
-   
+def ot(samples, Epochs = 200, tolerance = 1):
+    '''ablation study: with OT and without data'''
+    model = OT_Net(input_size = 1)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    writer = SummaryWriter('runs/OT_only')
+    print('Ablation Study OT only')
+    for epoch in range(Epochs):
+        train_loss = 0
+
+        for ot_distance, accuracy in samples:
+            accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            
+            outputs = model(torch.tensor([[ot_distance]], device=main_args.device))
+
+
+            # Compute loss
+            loss = criterion(outputs, accuracy_tensor)
+
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        train_loss /= len(samples)
+        if train_loss <= tolerance:
+            break
+        if epoch % 10 == 0:
+            print('Epoch {} loss {}'.format(epoch, train_loss))
+        if (epoch+1) % 10 == 0:
+            writer.add_scalar('training loss', loss.item())
+            writer.add_scalar('accuracy', accuracy)
+    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.sample_size))  
+    
+    writer.close()
+    return
 
 # results = sample_utility_samples() 
 # deepset_ot(results, Epochs = 150)     
 
-evaluate()
 
 
+#To run below: set ot_distance = 1 ot_distance_only = 0
+def evaluate_three_comparisons():
+    criterion = nn.MSELoss()
+    test_loss = 0
     
+    results = sample_utility_samples()   
+    print('Three evaluations!')
+    #ot
+    utility_samples_ot = [result[1:] for result in results]
+    
+    model = OT_Net(input_size = 1)
+    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.Net_trained)))
+    model.eval() # Set the model to evaluation mode
+    
+    true_values = []
+    predicted_values_ot = []
+    for ot, accuracy in utility_samples_ot:
+        opt_transport_tensor = torch.tensor([[ot]], device=main_args.device)
+        accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+        true_values.append(accuracy)
+        
+        outputs = model(opt_transport_tensor)
+        
+        predicted_values_ot.append(outputs.item())
+
+        loss = criterion(outputs, accuracy_tensor)
+        print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
+        test_loss += loss.item()
+    test_loss /= len(utility_samples_ot)
+    print('OT Only Test Loss is {}'.format(test_loss))
+    
+    #deepset_ot
+    model = DeepSet_OT(in_features=in_dims[main_args.dataset])
+    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.Net_trained)))
+    model.eval() # Set the model to evaluation mode
+        
+    predicted_values_deepset_ot = []
+    test_loss = 0
+    for dataloader, ot, accuracy in results:
+        opt_transport_tensor = torch.tensor([ot], device=main_args.device)
+        accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+        for images, labels in dataloader:
+            if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                images = images.mean(dim=1)
+                images = images.view(images.size(0), -1) 
+            outputs = model(images, opt_transport_tensor).to(device=main_args.device)
+            predicted_values_deepset_ot.append(outputs.item())
+            # Compute loss
+            loss = criterion(outputs, accuracy_tensor)
+            print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
+            test_loss += loss.item()
+    test_loss /= len(results)
+    print('DeepSets OT Test Loss is {}'.format(test_loss))
+    
+    #deepset
+    model = DeepSet(in_features=in_dims[main_args.dataset])
+    model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained)))
+    model.eval() # Set the model to evaluation mode
+
+    utility_samples_deepset = [[result[0], result[2]] for result in results]
+    predicted_values_deepset = []
+    test_loss = 0
+    for dataloader, accuracy in utility_samples_deepset:
+        accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+        for images, labels in dataloader:
+            if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
+                images = images.mean(dim=1)
+                images = images.view(images.size(0), -1) 
+            outputs = model(images).to(device=main_args.device)
+            predicted_values_deepset.append(outputs.item())
+
+            # Compute loss
+            loss = criterion(outputs, accuracy_tensor)
+            print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
+            test_loss += loss.item()
+    test_loss /= len(utility_samples_deepset)
+    print('DeepSets Test Loss is {}'.format(test_loss))
+    
+    with open('Three_predicted_vs_true_{}_{}_{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), 'w') as file:
+            for true, predicted_deepset, predicted_deepset_ot, predicted_ot in zip(true_values, predicted_values_deepset, predicted_values_deepset_ot, predicted_values_ot):
+                file.write(f"{true}, {predicted_deepset}, {predicted_deepset_ot}, {predicted_ot}\n")
+    
+
+
+evaluate()
+    
+# evaluate_three_comparisons()    
+         
+        
     
         
         

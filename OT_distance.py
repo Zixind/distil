@@ -21,7 +21,7 @@ from argparse import ArgumentParser
 import pickle
 import datetime
 
-from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net, DeepSet_Sigmoid
+from NN_classification import SetTransformer_OT, DeepSet_OT, DeepSet, OT_Net, DeepSet_Sigmoid, DeepSet_cifar
 from torch.utils.tensorboard import SummaryWriter
 
 import sys
@@ -269,7 +269,7 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
         
     return results   
 
-
+### Need to replace by OT_distance3.py
 def evaluate():
     '''evaluate new utility samples calculate MSE'''
     criterion = nn.MSELoss()
@@ -322,7 +322,7 @@ def evaluate():
     
     
     
-def deepset_ot(samples, Epochs = 150, tolerance = 10):
+def deepset_ot(samples, Epochs = 150, tolerance = 1):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
@@ -332,12 +332,15 @@ def deepset_ot(samples, Epochs = 150, tolerance = 10):
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
     writer = SummaryWriter('runs/DeepSet_OT')
     print('DeepSet + OT')
+    true_values = []
+    predicted_values = []
     for epoch in range(Epochs):
         train_loss = 0
 
         for dataloader, ot, accuracy in samples:
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            true_values.append(accuracy)
             for images, labels in dataloader:
             # Forward pass
                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
@@ -346,8 +349,10 @@ def deepset_ot(samples, Epochs = 150, tolerance = 10):
                     # print(images.shape) 
                 outputs = model(images, opt_transport_tensor)
 
+                
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
+                predicted_values.append(outputs.item())
 
             # Backward pass and optimization
                 optimizer.zero_grad()
@@ -359,16 +364,18 @@ def deepset_ot(samples, Epochs = 150, tolerance = 10):
             print('Epoch {} loss {}'.format(epoch, train_loss))
         if train_loss <= tolerance:
             break
-        if (epoch+1) % 10 == 0:
-            writer.add_scalar('training loss', loss.item())
-            writer.add_scalar('accuracy', accuracy)
+        writer.add_scalar('training loss', train_loss, epoch)
+        writer.add_scalar('accuracy', accuracy, epoch)
+    writer.close()
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.sample_size))  
     
-    writer.close()
+    with open('Training_deepset_ot_predicted_vs_true_{}_{}.txt'.format(main_args.dataset, main_args.sample_size), 'w') as file:
+        for true, predicted in zip(true_values, predicted_values):
+            file.write(f"{true}, {predicted}\n")
     return
     
 
-def deepset(samples, Epochs = 150, tolerance  = 10):
+def deepset(samples, Epochs = 150, tolerance = 1):
     '''ablation study: without OT'''
     if main_args.Sigmoid:
         model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
@@ -378,14 +385,24 @@ def deepset(samples, Epochs = 150, tolerance  = 10):
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     # model.eval()
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    
+    if main_args.dataset == 'SVHN' and main_args.sample_size == 20:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    elif main_args.dataset == 'SVHN' and main_args.sample_size == 50:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
     writer = SummaryWriter('runs/DeepSet_only')
     print('Ablation Study deepset only')
+    
+    true_values = []
+    predicted_values = []
     for epoch in range(Epochs):
         train_loss = 0
 
         for dataloader, accuracy in samples:
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
+            true_values.append(accuracy)
             for images, labels in dataloader:
             # Forward pass
                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
@@ -393,10 +410,10 @@ def deepset(samples, Epochs = 150, tolerance  = 10):
                     images = images.view(images.size(0), -1) 
                     # print(images.shape) 
                 outputs = model(images)
-
+                
+                predicted_values.append(outputs.item())
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
-
             # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
@@ -404,28 +421,32 @@ def deepset(samples, Epochs = 150, tolerance  = 10):
                 train_loss += loss.item()
         train_loss /= len(samples)
         if train_loss <= tolerance:
+            print('Training Loss: ', train_loss)
             break
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
-        if (epoch+1) % 10 == 0:
-            writer.add_scalar('training loss', loss.item())
-            writer.add_scalar('accuracy', accuracy)
+        writer.add_scalar('training loss', train_loss, epoch)
+        writer.add_scalar('accuracy', accuracy, epoch)
     if not main_args.Sigmoid:
         torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
     else:
         torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_Sigmoid.pth'.format(main_args.dataset, main_args.sample_size))  
-
     writer.close()
+    with open('Training_deepset_predicted_vs_true_{}_{}.txt'.format(main_args.dataset, main_args.sample_size), 'w') as file:
+        for true, predicted in zip(true_values, predicted_values):
+            file.write(f"{true}, {predicted}\n")
     return
     
 
-def ot(samples, Epochs = 200, tolerance = 10):
+def ot(samples, Epochs = 200, tolerance = 1):
     '''ablation study: with OT and without data'''
     model = OT_Net(input_size = 1)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     writer = SummaryWriter('runs/OT_only')
     print('Ablation Study OT only')
+    true_values = []
+    predicted_values = []
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -434,9 +455,10 @@ def ot(samples, Epochs = 200, tolerance = 10):
             
             outputs = model(torch.tensor([[ot_distance]], device=main_args.device))
 
-
+            true_values.append(accuracy)
             # Compute loss
             loss = criterion(outputs, accuracy_tensor)
+            predicted_values.append(outputs.item())
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -448,13 +470,22 @@ def ot(samples, Epochs = 200, tolerance = 10):
             break
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
-        if (epoch+1) % 10 == 0:
-            writer.add_scalar('training loss', loss.item())
-            writer.add_scalar('accuracy', accuracy)
-    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.sample_size))  
-    
+        writer.add_scalar('training loss', train_loss, epoch)
+        writer.add_scalar('accuracy', accuracy, epoch)
     writer.close()
+    torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.sample_size))  
+    with open('Training_ot_predicted_vs_true_{}_{}.txt'.format(main_args.dataset, main_args.sample_size), 'w') as file:
+        for true, predicted in zip(true_values, predicted_values):
+            file.write(f"{true}, {predicted}\n")
+    
     return
+
+
+def three_comparisons():
+    results = sample_utility_samples()   #ot_distance = 1 ot_distance_only = 0
+    ot([result[1:] for result in results], Epochs = main_args.Epochs) #excluding labeled
+    deepset_ot(results, Epochs = main_args.Epochs)
+    deepset([[result[0], results[2]] for result in results], Epochs = main_args.Epochs) #exclude ot
     
 
 if main_args.OT_distance_only:  #ablation study

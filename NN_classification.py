@@ -59,7 +59,8 @@ class DeepSet_cifar(nn.Module):
     def forward(self, input):
         x = input
         x = self.feature_extractor(x)
-        x = x.sum(dim=1)
+        # x = x.sum(dim=1)
+        x = x.sum(dim=0).unsqueeze(0)
         x = self.regressor(x)
         return x
 
@@ -360,8 +361,8 @@ class DeepSet_OT(nn.Module):
             nn.ELU(inplace=True),
             nn.Linear(512, 512),
             nn.ELU(inplace=True),
-            nn.Linear(512, 1),
-            nn.Sigmoid()
+            nn.Linear(512, 1)
+            # nn.Sigmoid()
         )
         
         self.backbone = nn.Linear(2, 1)
