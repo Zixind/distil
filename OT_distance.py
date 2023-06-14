@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader, Dataset, Subset, ConcatDataset, DataLoa
 import random
 import numpy as np
 from torchvision.models import resnet18, vgg16
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 
 
 
@@ -36,9 +38,9 @@ from distil.utils.train_helper import data_train      # A utility training class
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=20, choices = [5, 10, 15, 20])  
+parser.add_argument('--batch_size', type=int, default=15, choices = [5, 10, 15, 20])  
 parser.add_argument('--total_rounds', type=int, default=30)
-parser.add_argument('--Label_Initialize', type=int, default = 20, choices = [20, 30, 40])
+parser.add_argument('--Label_Initialize', type=int, default = 20, choices = [5, 10, 20, 30, 40])
 parser.add_argument('--model', type=str, default='resnet18', choices = ['vgg16', 'resnet18'])
 parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', 'MNIST', 'CIFAR10', 'USPS'])
 parser.add_argument('--num_repeats', type=int, default=10)
@@ -150,13 +152,13 @@ load_data_dict = {
 
 # print("CUDA is available:", torch.cuda.is_available())
 
-source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500, batch_size=64)  #batch_size=64,
+source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500, batch_size=64)  #batch_size=64,
 # source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
 
-Labeled = source_data[0]['Labeled']
+Labeled = source_data2[0]['Labeled']
 # Labeled2 = source_data2[0]['Labeled']
-Unlabeled = source_data[0]['Unlabeled']
-validation = source_data[0]['valid'] #fix validation dataset it will be used over the whole script
+Unlabeled = source_data2[0]['Unlabeled']
+validation = source_data2[0]['valid'] #fix validation dataset it will be used over the whole script
 # test = source_data[1]['test']     
 
 print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
@@ -224,7 +226,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
 
 # get_acc_dataloader(source_data, model=ResNet18(num_classes=10))
 
-def utility_sample(dataloader = source_data, sigmoid = main_args.Sigmoid):
+def utility_sample(dataloader, sigmoid = main_args.Sigmoid):
     '''Collect One Utility Sample'''
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model], sigmoid = sigmoid)
     if main_args.OT_distance:
@@ -247,22 +249,21 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
         if _ % 10 == 0:
             print('Samples Collected {}'.format(_))
         sample_size = random.sample(range(src_size, src_size + main_args.total_rounds * main_args.batch_size),1)[0]   #sampling from source dataset and total dataset
-        source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=5000)
+        source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
 
-        Labeled = source_data[0]['Labeled']
-        # Unlabeled = source_data[0]['Unlabeled']
-        # validation = source_data[0]['valid']
+        Labeled = source_data_inner[0]['Labeled']
+       
         
         
         if main_args.OT_distance:
-            ot, acc = utility_sample(dataloader = source_data)
+            ot, acc = utility_sample(dataloader = source_data_inner)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
             if ot_distance_only:
                 results.append([ot, acc])
             else:
                 results.append([Labeled, ot, acc])
         else:
-            acc = utility_sample(dataloader = source_data)
+            acc = utility_sample(dataloader = source_data_inner)
             print('Accuracy: {}'.format(acc))
         
             results.append([Labeled, acc])
@@ -334,6 +335,8 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1):
     print('DeepSet + OT')
     true_values = []
     predicted_values = []
+    
+    
     for epoch in range(Epochs):
         train_loss = 0
 
@@ -365,7 +368,7 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1):
         if train_loss <= tolerance:
             break
         writer.add_scalar('training loss', train_loss, epoch)
-        writer.add_scalar('accuracy', accuracy, epoch)
+        # writer.add_scalar('accuracy', accuracy, epoch)
     writer.close()
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.sample_size))  
     
@@ -390,8 +393,13 @@ def deepset(samples, Epochs = 150, tolerance = 1):
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     elif main_args.dataset == 'SVHN' and main_args.sample_size == 50:
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+    elif main_args.dataset == 'CIFAR10' and main_args.sample_size == 20:
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+        
+    scheduler = ReduceLROnPlateau(optimizer, 'min')
+
     writer = SummaryWriter('runs/DeepSet_only')
     print('Ablation Study deepset only')
     
@@ -417,16 +425,20 @@ def deepset(samples, Epochs = 150, tolerance = 1):
             # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
+
                 optimizer.step()
                 train_loss += loss.item()
         train_loss /= len(samples)
+        scheduler.step(train_loss)
+        
         if train_loss <= tolerance:
             print('Training Loss: ', train_loss)
             break
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         writer.add_scalar('training loss', train_loss, epoch)
-        writer.add_scalar('accuracy', accuracy, epoch)
+        # writer.add_scalar('accuracy', accuracy, epoch)
     if not main_args.Sigmoid:
         torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.sample_size))  
     else:
@@ -471,7 +483,7 @@ def ot(samples, Epochs = 200, tolerance = 1):
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         writer.add_scalar('training loss', train_loss, epoch)
-        writer.add_scalar('accuracy', accuracy, epoch)
+        # writer.add_scalar('accuracy', accuracy, epoch)
     writer.close()
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.sample_size))  
     with open('Training_ot_predicted_vs_true_{}_{}.txt'.format(main_args.dataset, main_args.sample_size), 'w') as file:
@@ -481,11 +493,11 @@ def ot(samples, Epochs = 200, tolerance = 1):
     return
 
 
-def three_comparisons():
-    results = sample_utility_samples()   #ot_distance = 1 ot_distance_only = 0
-    ot([result[1:] for result in results], Epochs = main_args.Epochs) #excluding labeled
-    deepset_ot(results, Epochs = main_args.Epochs)
-    deepset([[result[0], results[2]] for result in results], Epochs = main_args.Epochs) #exclude ot
+# def three_comparisons():
+#     results = sample_utility_samples()   #ot_distance = 1 ot_distance_only = 0
+#     ot([result[1:] for result in results], Epochs = main_args.Epochs) #excluding labeled
+#     deepset_ot(results, Epochs = main_args.Epochs)
+#     deepset([[result[0], results[2]] for result in results], Epochs = main_args.Epochs) #exclude ot
     
 
 if main_args.OT_distance_only:  #ablation study

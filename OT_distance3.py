@@ -134,10 +134,8 @@ load_data_dict = {
 # print("CUDA is available:", torch.cuda.is_available())
 
 source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=2000)
-source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
 
 Labeled = source_data[0]['Labeled']
-Labeled2 = source_data2[0]['Labeled']
 Unlabeled = source_data[0]['Unlabeled']
 validation = source_data[0]['valid'] #fix validation dataset
 test = source_data[1]['test']     
@@ -202,7 +200,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
     else:
         return acc
 
-def utility_sample(dataloader = source_data, sigmoid = main_args.Sigmoid):
+def utility_sample(dataloader, sigmoid = main_args.Sigmoid):
     '''Collect One Utility Sample'''
     acc = get_acc_dataloader(dataloader, model = load_data_dict[main_args.model], sigmoid = sigmoid)
     if main_args.OT_distance:
@@ -218,23 +216,23 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
         if _ % 10 == 0:
             print('Samples Collected {}'.format(_))
         sample_size = random.sample(range(src_size, src_size + main_args.total_rounds * main_args.batch_size),1)[0]   #sampling from source dataset and total dataset
-        source_data = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=5000)
+        source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
 
-        Labeled = source_data[0]['Labeled']
+        Labeled = source_data_inner[0]['Labeled']
         # Unlabeled = source_data[0]['Unlabeled']
         # validation = source_data[0]['valid']
         
         if main_args.OT_distance_only:
-            ot, acc = utility_sample(dataloader = source_data)
+            ot, acc = utility_sample(dataloader = source_data_inner)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
             results.append([ot, acc])
         elif main_args.OT_distance:
-            ot, acc = utility_sample(dataloader = source_data)
+            ot, acc = utility_sample(dataloader = source_data_inner)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
         
             results.append([Labeled, ot, acc])
         else:
-            acc = utility_sample(dataloader = source_data)
+            acc = utility_sample(dataloader = source_data_inner)
             print('Accuracy: {}'.format(acc))
         
             results.append([Labeled, acc])
@@ -329,7 +327,7 @@ def deepset(samples, Epochs = 150, tolerance  = 1):
     if main_args.Sigmoid:
         model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
     else:
-        model = DeepSet_cifar(in_features=in_dims[main_args.dataset])
+        model = DeepSet(in_features=in_dims[main_args.dataset])
     
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     # model.eval()
@@ -391,6 +389,7 @@ def evaluate():
         model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        print('Evaluation OT only')
         for ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([[ot]], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
@@ -419,6 +418,7 @@ def evaluate():
         model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        print('Evaluation DeepSets OT')
         for dataloader, ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
@@ -445,8 +445,12 @@ def evaluate():
             os.makedirs('{}/NonOT/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
 
             model = DeepSet(in_features=in_dims[main_args.dataset])
-            model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained)))
-            model.eval() # Set the model to evaluation mode
+            
+            state_dict = torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, main_args.Net_trained))
+            # # Filter out the state_dict to only include keys that exist in the current model
+            # state_dict = {k: v for k, v in state_dict.items() if k in model.state_dict()}
+            model.load_state_dict(state_dict)
+            model.eval()  # Set the model to evaluation mode
         else:
             os.makedirs('{}/NonOT_Sigmoid/Net_Trained_{}_Samples_{}'.format(main_args.dataset,main_args.Net_trained, main_args.sample_size), exist_ok = True)
 
@@ -455,6 +459,7 @@ def evaluate():
             model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        print('Evaluation DeepSets')
         true_values = []
         predicted_values = []
         for dataloader, accuracy in utility_samples:
@@ -474,13 +479,15 @@ def evaluate():
                 test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('DeepSets Test Loss is {}'.format(test_loss))
-        with open('Evalualtion_deepset_predicted_vs_true_{}_{}_{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), 'w') as file:
-            for true, predicted in zip(true_values, predicted_values):
-                file.write(f"{true}, {predicted}\n")
+        
         now = datetime.datetime.now()
         timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
         with open('{}/NonOT/Net_Trained_{}_Samples_{}/Loss_Evaluate_NonOT_Net_Trained_on_{}_{}_Time{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
             file.write(str(test_loss))
+        
+        with open('Evaluation_deepset_predicted_vs_true_{}_{}_{}_{}.txt'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size, timestamp), 'w') as file:
+            for true, predicted in zip(true_values, predicted_values):
+                file.write(f"{true}, {predicted}\n")
         return test_loss
     
 def ot(samples, Epochs = 200, tolerance = 1):

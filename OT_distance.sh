@@ -1,10 +1,10 @@
 #!/bin/bash
-node=a006
+node=a001
 partition=yuxinchen-contrib
 mem=11G
-initial=20
-dataset='MNIST'
-samplesize=10
+initial=5
+dataset='SVHN'
+samplesize=20
 ot_distance=0
 ot_distance_only=0
 jobname=OT_$ot_distance_$samplesize_$dataset

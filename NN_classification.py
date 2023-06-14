@@ -133,33 +133,6 @@ class PMA(nn.Module):
     def forward(self, X):
         return self.mab(self.S.repeat(X.size(0), 1, 1), X)
 
-# class DeepSet(nn.Module):
-#     def __init__(self, dim_input, num_outputs, dim_output, dim_hidden=128):
-#         super(DeepSet, self).__init__()
-#         self.num_outputs = num_outputs
-#         self.dim_output = dim_output
-#         self.enc = nn.Sequential(
-#                 nn.Linear(dim_input, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, dim_hidden))
-#         self.dec = nn.Sequential(
-#                 nn.Linear(dim_hidden, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, dim_hidden),
-#                 nn.ReLU(),
-#                 nn.Linear(dim_hidden, num_outputs*dim_output))
-
-#     def forward(self, X):
-#         X = self.enc(X).mean(-2)
-#         X = self.dec(X).reshape(-1, self.num_outputs, self.dim_output)
-#         return X
-
 class SetTransformer(nn.Module):
     def __init__(self, dim_input, num_outputs = 1, dim_output = 1,
             num_inds=10, dim_hidden=40, num_heads=4, ln=False):
@@ -229,14 +202,12 @@ class OT_Net(nn.Module):
         x = torch.relu(self.fc1(x))
         x = self.fc2(x)
         return x.view(1,1)
-   
-
-
-#copy from Si Chen
-class DeepSet(nn.Module):
-
+ 
+ 
+## copy versions  
+class DeepSet_OT_128(nn.Module):
     def __init__(self, in_features, set_features=128):
-        super(DeepSet, self).__init__()
+        super(DeepSet_OT_128, self).__init__()
         self.in_features = in_features
         self.out_features = set_features
         self.feature_extractor = nn.Sequential(
@@ -255,6 +226,66 @@ class DeepSet(nn.Module):
             nn.Linear(128, 128),
             nn.ELU(inplace=True),
             nn.Linear(128, 1)
+        )
+        
+        self.backbone = nn.Linear(2, 1)
+        self.add_module('0', self.feature_extractor)
+        self.add_module('1', self.regressor)
+        self.add_module('2', self.backbone)
+        
+        
+    def reset_parameters(self):
+        for module in self.children():
+            reset_op = getattr(module, "reset_parameters", None)
+            if callable(reset_op):
+                reset_op()
+            
+    def forward(self, input, ot, representation = False):
+        # Flatten the images into vectors
+        x = self.feature_extractor(input)
+        # x = x.sum(dim=1)
+        x = x.sum(dim=0).unsqueeze(0)
+        if representation:
+            return x
+        else:
+            x = self.regressor(x)
+            combined = torch.cat((x, ot.view(1,1)), dim=1)
+            y = self.backbone(combined)
+        return y.view(1,1)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'Feature Exctractor=' + str(self.feature_extractor) \
+            + '\n Set Feature' + str(self.regressor) + ')'
+
+
+#copy from Si Chen
+class DeepSet(nn.Module):
+
+    def __init__(self, in_features, set_features=128):
+        super(DeepSet, self).__init__()
+        self.in_features = in_features
+        self.out_features = set_features
+        self.feature_extractor = nn.Sequential(
+            nn.Linear(in_features, 128),
+            nn.ELU(inplace=True),
+
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+
+            nn.Linear(128, set_features)
+        )
+
+        self.regressor = nn.Sequential(
+            nn.Linear(set_features, 128),
+            nn.ELU(inplace=True),
+
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+
+            nn.Linear(128, 128),
+            nn.ELU(inplace=True),
+            nn.Linear(128, 1)
             # nn.Sigmoid()
         )
         
@@ -263,11 +294,18 @@ class DeepSet(nn.Module):
         self.add_module('1', self.regressor)
         
         
+    # def reset_parameters(self):
+    #     for module in self.children():
+    #         reset_op = getattr(module, "reset_parameters", None)
+    #         if callable(reset_op):
+    #             reset_op()
+    
     def reset_parameters(self):
-        for module in self.children():
-            reset_op = getattr(module, "reset_parameters", None)
-            if callable(reset_op):
-                reset_op()
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
             
     def forward(self, input, representation = False):
         # Flatten the images into vectors
