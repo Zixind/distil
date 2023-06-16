@@ -35,7 +35,7 @@ from distil.utils.train_helper import data_train      # A utility training class
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=20, choices = [5, 10, 15, 20])  
+parser.add_argument('--batch_size', type=int, default=15, choices = [5, 10, 15, 20])  
 parser.add_argument('--total_rounds', type=int, default=30)
 parser.add_argument('--Label_Initialize', type=int, default = 20, choices = [20, 30, 40])
 parser.add_argument('--model', type=str, default='resnet18', choices = ['vgg16', 'resnet18'])
@@ -51,11 +51,12 @@ parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether
 
 main_args = parser.parse_args()
 
+#For resize in load_torchvision_data_active_learn
 DATASET_SIZES = {
     'MNIST': 28,
-    'SVHN': 32,
+    'SVHN': 32,   #original 32
     'CIFAR10': 28,
-    'USPS': 16
+    'USPS': 28
 }
 
 DATASET_NCLASSES = {
@@ -74,15 +75,22 @@ DATASET_NCLASSES = {
 Feature_Cost_dim = {
     'MNIST': (3, 28, 28),
     'CIFAR10': (3, 28, 28),
-    'SVHN': (3, 32, 32)       
+    'SVHN': (3, 32, 32),
+    'USPS': (3, 28, 28)       
 }
+
+# in_dims = {
+#     'MNIST': int(28*28),
+#     'CIFAR10': int(28*28),
+#     'SVHN': int(32*32)
+# }
 
 in_dims = {
-    'MNIST': int(28*28),
-    'CIFAR10': int(28*28),
-    'SVHN': int(32*32)
+    'MNIST': int(3*28*28),
+    'CIFAR10': int(3*28*28),   #original 32*32
+    'SVHN': int(3*32*32),    #apply mean before inputing to deepsets model
+    'USPS': int(3*28*28)
 }
-
 
 dtst = main_args.dataset
 
@@ -147,11 +155,22 @@ print('Dataset: {} Acquisition: {} Net Trained {}'.format(src_dataset, main_args
 
 
 def calc_OT(dataloader1, embedder, verbose = 0):
+    '''calculate Optimal Transport distance with Feature Cost'''
+    '''dataloder1 is dataloader[0]'''
     embedder.fc = torch.nn.Identity()
     for p in embedder.parameters():
         p.requires_grad = False
     Labeled = dataloader1['Labeled']
     valid = dataloader1['valid']
+    
+    
+    #convert Dataset to Dataloader
+    print('Labeled Length: {}, Valid Length: {}'.format(len(Labeled), len(valid)))
+    Labeled_dataloader = DataLoader(Labeled, batch_size=len(Labeled), shuffle=True) 
+    valid_dataloader = DataLoader(valid, batch_size=len(valid), shuffle=True) 
+    
+    
+    # valid = validation
     # Here we use same embedder for both datasets
     feature_cost = FeatureCost(src_embedding = embedder,
                            src_dim = Feature_Cost_dim[src_dataset],
@@ -160,7 +179,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
                            p = 2,
                            device=main_args.device)
 
-    dist = DatasetDistance(Labeled, valid,
+    dist = DatasetDistance(Labeled_dataloader, valid_dataloader,
                           inner_ot_method = 'exact',
                           debiased_loss = True,
                           feature_cost = feature_cost,
@@ -168,25 +187,24 @@ def calc_OT(dataloader1, embedder, verbose = 0):
                           sqrt_niters=10,
                           precision='single',
                           p = 2, entreg = 1e-1,
-                          device=main_args.device)
+                          device=main_args.device, verbose = 0)
     d = dist.distance(maxsamples = 1000)
     if verbose:
         print(f'OTDD(Labeled,Validation)={d:8.2f}')
     return d
 
-# calc_OT(source_data[0], embedder = resnet18(pretrained=True).eval())
-
 
 def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True, sigmoid = main_args.Sigmoid):    
-    args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
+    args = {'n_epoch':100, 'lr':float(0.001), 'batch_size':50, 'max_accuracy':0.90, 'optimizer':'adam', 'isverbose':1, 'islogs':1} 
     dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
+    
+    #dataloader[0]['Labeled'] is a dataset
 
     # Get the test accuracy of the initial model  on validation dataset
 
     if validation_randomized:
         valid = dataloader[0]['valid']  # need to chagne to a randomized validation set during pretrain      main phase 5000 fixed validation set
-    else:
-        valid = validation
+   
     # Retrain the model and update the strategy with the result
     model = dt.train()
     # strategy.update_model(model)
@@ -194,7 +212,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
     acc = dt.get_acc_on_set(valid) 
 
     if verbose:
-        print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
+        print('Initial Validation accuracy:', round(acc*100, 2), flush=True)
     if not sigmoid:
         return round(acc*100, 2)
     else:
@@ -209,19 +227,22 @@ def utility_sample(dataloader, sigmoid = main_args.Sigmoid):
     else:
         return acc
 
-def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = main_args.OT_distance_only):
+def sample_utility_samples(sample_size = main_args.sample_size):
     results = []
     
     for _ in range(sample_size):
         if _ % 10 == 0:
             print('Samples Collected {}'.format(_))
         sample_size = random.sample(range(src_size, src_size + main_args.total_rounds * main_args.batch_size),1)[0]   #sampling from source dataset and total dataset
-        source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
+        if main_args.dataset in ['MNIST', 'USPS']:
+            source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
+        else:
+            source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=False, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
 
         Labeled = source_data_inner[0]['Labeled']
-        # Unlabeled = source_data[0]['Unlabeled']
-        # validation = source_data[0]['valid']
         
+        Labeled_dataloader = DataLoader(Labeled, batch_size=len(Labeled), shuffle=True)   #make the dataloader only contains one batch(one single utility sample)
+
         if main_args.OT_distance_only:
             ot, acc = utility_sample(dataloader = source_data_inner)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
@@ -230,28 +251,15 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
             ot, acc = utility_sample(dataloader = source_data_inner)
             print('OT Distance: {}, Accuracy: {}'.format(ot, acc))
         
-            results.append([Labeled, ot, acc])
+            results.append([Labeled_dataloader, ot, acc])
         else:
             acc = utility_sample(dataloader = source_data_inner)
             print('Accuracy: {}'.format(acc))
         
-            results.append([Labeled, acc])
+            results.append([Labeled_dataloader, acc])
         
     return results
     
-
-# # open a file to write the pickled list
-# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'wb') as f:
-#     # use pickle.dump to pickle the list
-#     pickle.dump(results, f)
-
-
-
-# # open a file to load the pickled list
-# with open('Samples_{}_Dataset_{}.pkl'.format(main_args.sample_size, main_args.dataset), 'rb') as f:
-#     # use pickle.dump to pickle the list
-#     results = pickle.load(f)
-
    
 def deepset_ot(samples, Epochs = 150):
     logging.basicConfig(filename='deepset_ot.log', level=logging.INFO)
@@ -292,35 +300,6 @@ def deepset_ot(samples, Epochs = 150):
         #     writer.add_scalar('accuracy', accuracy, epoch * len(samples) + i)
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, main_args.sample_size))  
     
-
-# def evaluate():
-#     '''evaluate new utility samples calculate MSE using pretrained models'''
-#     # Suppose your model is called 'model'
-#     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
-#     model.load_state_dict(torch.load('Net_{}_Sample_Size_{}.pth'.format(main_args.dataset, 100)))
-#     model.eval() # Set the model to evaluation mode
-
-#     results = sample_utility_samples(sample_size = main_args.sample_size)
-#     criterion = nn.MSELoss()
-#     test_loss = 0
-#     for one_dataloader, ot, accuracy in results:
-#             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
-#             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
-#             for images, labels in one_dataloader:
-#                 if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-#                     images = images.mean(dim=1)
-#                     images = images.view(images.size(0), -1) 
-#                 outputs = model(images, opt_transport_tensor).to(device=main_args.device)
-
-#             # Compute loss
-#                 loss = criterion(outputs, accuracy_tensor)
-#                 print('Predicted Value: {}, True Value:{}'.format(outputs.detach().cpu().numpy(), accuracy_tensor.detach().cpu().numpy()))
-#                 test_loss += loss.item()
-#     test_loss /= len(results)
-#     print('Test Loss is {}'.format(test_loss))
-#     with open('Loss_Evaluate.txt', 'w') as file:
-#         file.write(str(test_loss))
-#     return test_loss
            
 def deepset(samples, Epochs = 150, tolerance  = 1):
     '''ablation study: without OT'''
@@ -388,7 +367,7 @@ def evaluate():
         model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_OT_only.pth'.format(main_args.dataset, main_args.Net_trained)))
         model.eval() # Set the model to evaluation mode
         
-        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        utility_samples = sample_utility_samples()
         print('Evaluation OT only')
         for ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([[ot]], device=main_args.device)
@@ -402,7 +381,7 @@ def evaluate():
                 # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
                 print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
-                test_loss += loss.item()
+                test_lsoss += loss.item()
         test_loss /= len(utility_samples)
         print('OT Only Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
@@ -417,16 +396,14 @@ def evaluate():
         model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.Net_trained)))
         model.eval() # Set the model to evaluation mode
         
-        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        utility_samples = sample_utility_samples()
         print('Evaluation DeepSets OT')
         for dataloader, ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
             for images, labels in dataloader:
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-                    images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1) 
-                    # print(images.shape) 
+            # Forward pass
+                images = images.view(images.shape[0], -1)
                 outputs = model(images, opt_transport_tensor).to(device=main_args.device)
 
             # Compute loss
@@ -458,7 +435,7 @@ def evaluate():
             model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet_Sigmoid.pth'.format(main_args.dataset, main_args.Net_trained)))
             model.eval() # Set the model to evaluation mode
         
-        utility_samples = sample_utility_samples(sample_size = main_args.sample_size)
+        utility_samples = sample_utility_samples()
         print('Evaluation DeepSets')
         true_values = []
         predicted_values = []
@@ -466,13 +443,9 @@ def evaluate():
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
             true_values.append(accuracy)
             for images, labels in dataloader:
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-                    images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1) 
-                    # print(images.shape) 
+                images = images.view(images.shape[0], -1)
                 outputs = model(images).to(device=main_args.device)
-                predicted_values.append(outputs.item())
-
+                
             # Compute loss
                 loss = criterion(outputs, accuracy_tensor)
                 print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))

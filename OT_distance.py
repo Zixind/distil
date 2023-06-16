@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Dataset, Subset, ConcatDataset, DataLoa
 import random
 import numpy as np
 from torchvision.models import resnet18, vgg16
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
 
 
 
@@ -63,7 +63,7 @@ main_args = parser.parse_args()
 #CIFAR10 has better prediction
 DATASET_SIZES = {
     'MNIST': 28,
-    'SVHN': 32,
+    'SVHN': 32, #original 32
     'CIFAR10': 28,
     'USPS': 28
 }
@@ -85,14 +85,14 @@ Feature_Cost_dim = {
     'MNIST': (3, 28, 28),
     'CIFAR10': (3, 28, 28),
     'SVHN': (3, 32, 32),
-    'USPS': (3, 32, 32)       
+    'USPS': (3, 28, 28)       
 }
 
 in_dims = {
-    'MNIST': int(28*28),
-    'CIFAR10': int(28*28),
-    'SVHN': int(32*32),    #apply mean before inputing to deepsets model
-    'USPS': int(32*32)
+    'MNIST': int(3*28*28),
+    'CIFAR10': int(3*28*28),   #original 32*32
+    'SVHN': int(3*32*32),    #apply mean before inputing to deepsets model
+    'USPS': int(3*28*28)
 }
 
 # to3channel = {
@@ -108,7 +108,6 @@ src_size = main_args.Label_Initialize
 
 # Load MNIST/CIFAR in 3channels (needed by torchvision models)
 src_dataset = main_args.dataset
-src_dataset2 = 'SVHN'
 target_dataset = main_args.dataset
 resize = DATASET_SIZES[main_args.dataset]
 num_classes = DATASET_NCLASSES[main_args.dataset]
@@ -152,14 +151,15 @@ load_data_dict = {
 
 # print("CUDA is available:", torch.cuda.is_available())
 
-source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500, batch_size=64)  #batch_size=64,
-# source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=64, to3channels=True, Label_Initialize = src_size + main_args.batch_size, dataloader_or_not = True, maxsize=2000)
+# source_data2 = load_torchvision_data_active_learn(src_dataset, resize=resize, to3channels=True, Label_Initialize = src_size, dataloader_or_not = True, maxsize=500, batch_size=64)  #batch_size=64,
+# #Label_initialize means training data
 
-Labeled = source_data2[0]['Labeled']
-# Labeled2 = source_data2[0]['Labeled']
-Unlabeled = source_data2[0]['Unlabeled']
-validation = source_data2[0]['valid'] #fix validation dataset it will be used over the whole script
-# test = source_data[1]['test']     
+
+# Labeled = source_data2[0]['Labeled']
+# # Labeled2 = source_data2[0]['Labeled']
+# Unlabeled = source_data2[0]['Unlabeled']
+# validation = source_data2[0]['valid'] #fix validation dataset it will be used over the whole script
+# # test = source_data[1]['test']     
 
 print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
 
@@ -167,14 +167,73 @@ print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
 # embedder = resnet18(pretrained=True).eval()
 
 
+import torch
+import numpy as np
+
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience."""
+    def __init__(self, patience=30, verbose=False, delta=0):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement. 
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+
+    def __call__(self, val_loss, model):
+
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss, model):
+        '''Saves model when validation loss decrease.'''
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        torch.save(model.state_dict(), 'checkpoint.pt')  # Save the model checkpoint
+        self.val_loss_min = val_loss
+
+
+early_stopping = EarlyStopping(patience=3, verbose=True)
+
+
 def calc_OT(dataloader1, embedder, verbose = 0):
     '''calculate Optimal Transport distance with Feature Cost'''
+    '''dataloder1 is dataloader[0]'''
     embedder.fc = torch.nn.Identity()
     for p in embedder.parameters():
         p.requires_grad = False
     Labeled = dataloader1['Labeled']
-    # valid = dataloader1['valid']
-    valid = validation
+    valid = dataloader1['valid']
+    
+    
+    #convert Dataset to Dataloader
+    print('Labeled Length: {}, Valid Length: {}'.format(len(Labeled), len(valid)))
+    Labeled_dataloader = DataLoader(Labeled, batch_size=len(Labeled), shuffle=True) 
+    valid_dataloader = DataLoader(valid, batch_size=len(valid), shuffle=True) 
+    
+    
+    # valid = validation
     # Here we use same embedder for both datasets
     feature_cost = FeatureCost(src_embedding = embedder,
                            src_dim = Feature_Cost_dim[src_dataset],
@@ -183,7 +242,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
                            p = 2,
                            device=main_args.device)
 
-    dist = DatasetDistance(Labeled, valid,
+    dist = DatasetDistance(Labeled_dataloader, valid_dataloader,
                           inner_ot_method = 'exact',
                           debiased_loss = True,
                           feature_cost = feature_cost,
@@ -191,7 +250,7 @@ def calc_OT(dataloader1, embedder, verbose = 0):
                           sqrt_niters=10,
                           precision='single',
                           p = 2, entreg = 1e-1,
-                          device=main_args.device)
+                          device=main_args.device, verbose = 0)
     d = dist.distance(maxsamples = 1000)
     if verbose:
         print(f'OTDD(Labeled,Validation)={d:8.2f}')
@@ -202,15 +261,17 @@ def calc_OT(dataloader1, embedder, verbose = 0):
 
 def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = True, sigmoid = main_args.Sigmoid):    
     '''Get accuracy on randomized/non_randomized validation set'''
-    args = {'n_epoch':50, 'lr':float(0.001), 'batch_size':20, 'max_accuracy':0.70, 'optimizer':'adam'} 
-    dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
+    args = {'n_epoch':100, 'lr':float(0.001), 'batch_size':50, 'max_accuracy':0.90, 'optimizer':'adam', 'isverbose': 1, 'islogs':1} 
+    # dt = data_train(dataloader[0]['Labeled'].dataset, model, args)
+    dt = data_train(dataloader[0]['Labeled'], model, args)
+    #dataloader[0]['Labeled'] is a dataset
 
     # Get the test accuracy of the initial model  on validation dataset
 
     if validation_randomized:
         valid = dataloader[0]['valid']  # need to chagne to a randomized validation set during pretrain      main phase 5000 fixed validation set
-    else:
-        valid = validation
+    # else:
+    #     valid = validation
     # Retrain the model and update the strategy with the result
     model = dt.train()
     # strategy.update_model(model)
@@ -218,7 +279,7 @@ def get_acc_dataloader(dataloader, model, verbose = 1, validation_randomized = T
     acc = dt.get_acc_on_set(valid) 
 
     if verbose:
-        print('Initial Testing accuracy:', round(acc*100, 2), flush=True)
+        print('Initial Validation accuracy:', round(acc*100, 2), flush=True)
     if not sigmoid:
         return round(acc*100, 2)
     else:
@@ -236,12 +297,6 @@ def utility_sample(dataloader, sigmoid = main_args.Sigmoid):
         return acc
     
 
-
-
-
-
-
-
 def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = False):
     results = []
     
@@ -249,11 +304,16 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
         if _ % 10 == 0:
             print('Samples Collected {}'.format(_))
         sample_size = random.sample(range(src_size, src_size + main_args.total_rounds * main_args.batch_size),1)[0]   #sampling from source dataset and total dataset
-        source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
+        
+        if main_args.dataset in ['MNIST', 'USPS']:
+            source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=True, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
+        else:
+            source_data_inner = load_torchvision_data_active_learn(src_dataset, resize=resize, batch_size=sample_size, to3channels=False, Label_Initialize = sample_size, dataloader_or_not = True, maxsize=500)
 
         Labeled = source_data_inner[0]['Labeled']
-       
         
+        Labeled_dataloader = DataLoader(Labeled, batch_size=len(Labeled), shuffle=True)   #make the dataloader only contains one batch(one single utility sample)
+
         
         if main_args.OT_distance:
             ot, acc = utility_sample(dataloader = source_data_inner)
@@ -261,12 +321,16 @@ def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only
             if ot_distance_only:
                 results.append([ot, acc])
             else:
-                results.append([Labeled, ot, acc])
+                # results.append([Labeled, ot, acc])
+                results.append([Labeled_dataloader, ot, acc])
         else:
             acc = utility_sample(dataloader = source_data_inner)
             print('Accuracy: {}'.format(acc))
         
-            results.append([Labeled, acc])
+            # results.append([Labeled, acc])
+            results.append([Labeled_dataloader, acc])
+
+
         
     return results   
 
@@ -323,14 +387,15 @@ def evaluate():
     
     
     
-def deepset_ot(samples, Epochs = 150, tolerance = 1):
+def deepset_ot(samples, Epochs = 150, tolerance = 1, earlystopping = False):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
+    model.reset_parameters()
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     if main_args.dataset == 'MNIST':
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2, weight_decay = 1e-4)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3, weight_decay = 1e-4)
     writer = SummaryWriter('runs/DeepSet_OT')
     print('DeepSet + OT')
     true_values = []
@@ -346,10 +411,7 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1):
             true_values.append(accuracy)
             for images, labels in dataloader:
             # Forward pass
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-                    images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1) 
-                    # print(images.shape) 
+                images = images.view(images.shape[0], -1)
                 outputs = model(images, opt_transport_tensor)
 
                 
@@ -360,9 +422,12 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1):
             # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
                 optimizer.step()
                 train_loss += loss.item()
         train_loss /= len(samples)
+        if earlystopping:
+            early_stopping(train_loss, model)
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         if train_loss <= tolerance:
@@ -372,33 +437,39 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1):
     writer.close()
     torch.save(model.state_dict(), 'Net_{}_Sample_Size_{}_DeepSet_OT.pth'.format(main_args.dataset, main_args.sample_size))  
     
+    
     with open('Training_deepset_ot_predicted_vs_true_{}_{}.txt'.format(main_args.dataset, main_args.sample_size), 'w') as file:
         for true, predicted in zip(true_values, predicted_values):
             file.write(f"{true}, {predicted}\n")
     return
     
 
-def deepset(samples, Epochs = 150, tolerance = 1):
+
+def deepset(samples, Epochs = 150, tolerance = 5, earlystopping = False):
     '''ablation study: without OT'''
     if main_args.Sigmoid:
         model = DeepSet_Sigmoid(in_features=in_dims[main_args.dataset])
     else:
         model = DeepSet(in_features=in_dims[main_args.dataset])
+        model.reset_parameters()
     
     # model.load_state_dict(torch.load('Net_{}_Sample_Size_{}_DeepSet.pth'.format(main_args.dataset, 100)))
     # model.eval()
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss(reduction = 'sum')
     
     if main_args.dataset == 'SVHN' and main_args.sample_size == 20:
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3, weight_decay = 1e-4)
     elif main_args.dataset == 'SVHN' and main_args.sample_size == 50:
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3, weight_decay = 1e-4)
     elif main_args.dataset == 'CIFAR10' and main_args.sample_size == 20:
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 5e-3)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3)
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3, weight_decay = 1e-4)
         
     scheduler = ReduceLROnPlateau(optimizer, 'min')
+    
+    # scheduler = StepLR(optimizer, step_size=200, gamma=0.1)
+
 
     writer = SummaryWriter('runs/DeepSet_only')
     print('Ablation Study deepset only')
@@ -412,11 +483,7 @@ def deepset(samples, Epochs = 150, tolerance = 1):
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
             true_values.append(accuracy)
             for images, labels in dataloader:
-            # Forward pass
-                if main_args.dataset == 'MNIST' or main_args.dataset == 'CIFAR10' or main_args.dataset == 'SVHN':
-                    images = images.mean(dim=1)
-                    images = images.view(images.size(0), -1) 
-                    # print(images.shape) 
+                images = images.view(images.shape[0], -1)
                 outputs = model(images)
                 
                 predicted_values.append(outputs.item())
@@ -425,16 +492,24 @@ def deepset(samples, Epochs = 150, tolerance = 1):
             # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
 
                 optimizer.step()
                 train_loss += loss.item()
         train_loss /= len(samples)
         scheduler.step(train_loss)
         
+        if earlystopping:
+            early_stopping(train_loss, model)
+
+            if early_stopping.early_stop:
+                print("Early stopping")
+                break
+        
         if train_loss <= tolerance:
             print('Training Loss: ', train_loss)
             break
+        
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         writer.add_scalar('training loss', train_loss, epoch)
@@ -508,7 +583,10 @@ elif main_args.OT_distance:
     deepset_ot(results, Epochs = main_args.Epochs)
 else: #ablation study
     results = sample_utility_samples()
-    deepset(results, Epochs = main_args.Epochs)
+    if len(results) <= 20:
+        deepset(results, Epochs = main_args.Epochs, tolerance=5)
+    else:
+        deepset(results, Epochs = main_args.Epochs, tolerance=3)
     
 
     

@@ -262,31 +262,26 @@ class DeepSet_OT_128(nn.Module):
 #copy from Si Chen
 class DeepSet(nn.Module):
 
-    def __init__(self, in_features, set_features=128):
+    def __init__(self, in_features, set_features=512):
         super(DeepSet, self).__init__()
         self.in_features = in_features
         self.out_features = set_features
         self.feature_extractor = nn.Sequential(
-            nn.Linear(in_features, 128),
+            nn.Linear(in_features, 512),
             nn.ELU(inplace=True),
-
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-
-            nn.Linear(128, set_features)
+            nn.Linear(512, set_features)
         )
 
         self.regressor = nn.Sequential(
-            nn.Linear(set_features, 128),
+            nn.Linear(set_features, 512),
             nn.ELU(inplace=True),
-
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-
-            nn.Linear(128, 128),
+            nn.Linear(512, 512),
             nn.ELU(inplace=True),
-            nn.Linear(128, 1)
-            # nn.Sigmoid()
+            nn.Linear(512, 1)
         )
         
 
@@ -303,9 +298,10 @@ class DeepSet(nn.Module):
     def reset_parameters(self):
         for module in self.modules():
             if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
+                nn.init.kaiming_uniform_(module.weight, nonlinearity='relu')
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
+
             
     def forward(self, input, representation = False):
         # Flatten the images into vectors
