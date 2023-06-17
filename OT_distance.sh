@@ -1,10 +1,10 @@
 #!/bin/bash
-node=f003
+node=b001
 partition=yuxinchen-contrib
 mem=48G
 initial=10
-dataset='CIFAR10'
-samplesize=80
+dataset='MNIST'
+samplesize=50
 ot_distance=1
 ot_distance_only=0
 jobname=OT_$ot_distance_$samplesize_$dataset
