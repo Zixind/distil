@@ -46,7 +46,7 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]) # #of utility samples collected during pretraining
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120, 150, 180, 200, 250]) # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700, 800, 1000])
@@ -387,15 +387,20 @@ def evaluate():
     
     
     
-def deepset_ot(samples, Epochs = 150, tolerance = 1, earlystopping = False):
+def deepset_ot(samples, Epochs = 150, earlystopping = False):
     model = DeepSet_OT(in_features=in_dims[main_args.dataset])
     model.reset_parameters()
     # model = SetTransformer_OT(dim_input=in_dims[main_args.dataset])
     criterion = nn.MSELoss()
     if main_args.dataset == 'MNIST':
+        optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4, weight_decay = 1e-4)
+        tolerance = 1
+    elif main_args.dataset == 'USPS' and main_args.sample_size <= 100:
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2, weight_decay = 1e-4)
+        tolerance = 400
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr = 1e-3, weight_decay = 1e-4)
+        tolerance = 1
     writer = SummaryWriter('runs/DeepSet_OT')
     print('DeepSet + OT')
     true_values = []
@@ -422,7 +427,7 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1, earlystopping = False):
             # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
                 optimizer.step()
                 train_loss += loss.item()
         train_loss /= len(samples)
@@ -431,6 +436,7 @@ def deepset_ot(samples, Epochs = 150, tolerance = 1, earlystopping = False):
         if epoch % 10 == 0:
             print('Epoch {} loss {}'.format(epoch, train_loss))
         if train_loss <= tolerance:
+            print('Final Training Loss {}'.format(train_loss))
             break
         writer.add_scalar('training loss', train_loss, epoch)
         # writer.add_scalar('accuracy', accuracy, epoch)
@@ -529,7 +535,7 @@ def ot(samples, Epochs = 200, tolerance = 1):
     '''ablation study: with OT and without data'''
     model = OT_Net(input_size = 1)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-2)
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-1)
     writer = SummaryWriter('runs/OT_only')
     print('Ablation Study OT only')
     true_values = []

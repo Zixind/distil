@@ -268,6 +268,7 @@ class DeepSet(nn.Module):
         self.out_features = set_features
         self.feature_extractor = nn.Sequential(
             nn.Linear(in_features, 512),
+            nn.BatchNorm1d(512),
             nn.ELU(inplace=True),
             nn.Linear(512, 512),
             nn.ELU(inplace=True),
@@ -382,6 +383,7 @@ class DeepSet_OT(nn.Module):
         self.out_features = set_features
         self.feature_extractor = nn.Sequential(
             nn.Linear(in_features, 512),
+            nn.BatchNorm1d(512),
             nn.ELU(inplace=True),
             nn.Linear(512, 512),
             nn.ELU(inplace=True),
@@ -405,12 +407,19 @@ class DeepSet_OT(nn.Module):
         self.add_module('2', self.backbone)
         
         
+    # def reset_parameters(self):
+    #     for module in self.children():
+    #         reset_op = getattr(module, "reset_parameters", None)
+    #         if callable(reset_op):
+    #             reset_op()
+    
     def reset_parameters(self):
-        for module in self.children():
-            reset_op = getattr(module, "reset_parameters", None)
-            if callable(reset_op):
-                reset_op()
-            
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
     def forward(self, input, ot, representation = False):
         # Flatten the images into vectors
     

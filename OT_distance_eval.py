@@ -46,12 +46,12 @@ parser.add_argument('--dataset', type=str, default='MNIST', choices = ['SVHN', '
 parser.add_argument('--num_repeats', type=int, default=10)
 parser.add_argument('--acquisition', type=str, default='BADGE', choices=['random', 'GLISTER', 'CoreSet', 'BADGE'])
 parser.add_argument('--device', type=str, default='cpu', choices=['cuda', 'cpu'])
-parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120]) # #of utility samples collected during pretraining
+parser.add_argument('--sample_size', type=int, default=5, choices=[5, 10, 20, 30, 100, 50, 80, 40, 120, 150, 180, 200, 250]) # #of utility samples collected during pretraining
 parser.add_argument('--OT_distance', type=int, default=1, choices=[1, 0])
 parser.add_argument('--OT_distance_only', type=int, default=1, choices=[1, 0])
 parser.add_argument('--Epochs', type=int, default=500, choices=[300, 400, 500, 600, 700, 800, 1000])
 parser.add_argument('--Sigmoid', type=int, default=0, choices=[0, 1])   #whether project into values between [0,1]     1 = True
-parser.add_argument('--Net_trained', type=int, default=20, choices=[20, 50, 80, 100])   #whether project into values between [0,1]     1 = True
+parser.add_argument('--Net_trained', type=int, default=20, choices=[20, 50, 80, 100, 150, 180, 200, 250])   #whether project into values between [0,1]     1 = True
 
 
 main_args = parser.parse_args()
@@ -163,7 +163,7 @@ load_data_dict = {
 # validation = source_data2[0]['valid'] #fix validation dataset it will be used over the whole script
 # # test = source_data[1]['test']     
 
-print('Dataset: {} Acquisition: {}'.format(src_dataset, main_args.acquisition))
+print('Dataset: {} Net_trained: {}'.format(src_dataset, main_args.Net_trained))
 
 # Embed using a pretrained (+frozen) resnet
 # embedder = resnet18(pretrained=True).eval()
@@ -297,7 +297,7 @@ def utility_sample(dataloader, sigmoid = main_args.Sigmoid):
         return acc
     
 
-def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = False):
+def sample_utility_samples(sample_size = main_args.sample_size, ot_distance_only = main_args.OT_distance_only):
     results = []
     
     for _ in range(sample_size):
@@ -520,8 +520,8 @@ def ot(samples, Epochs = 200, tolerance = 1):
 #     deepset([[result[0], results[2]] for result in results], Epochs = main_args.Epochs) #exclude ot
 def evaluate():
     '''evaluate new utility samples calculate MSE'''
-    criterion = nn.MSELoss()
-    test_loss = 0
+    criterion = nn.MSELoss(reduction = 'sum')
+    
     
     if main_args.OT_distance_only:
         os.makedirs('{}/OT_only/Net_Trained_{}_Samples_{}'.format(main_args.dataset, main_args.Net_trained, main_args.sample_size), exist_ok = True)
@@ -531,18 +531,16 @@ def evaluate():
         model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples()
-        print('Evaluation OT only')
+        print('Evaluation OT only {}'.format(main_args.dataset))
+        test_loss = 0
         for ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([[ot]], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
-            for ot_distance, accuracy in utility_samples:
-                accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
-            
-                outputs = model(torch.tensor([[ot_distance]], device=main_args.device))
+            outputs = model(opt_transport_tensor)
                 # Compute loss
-                loss = criterion(outputs, accuracy_tensor)
-                print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
-                test_lsoss += loss.item()
+            loss = criterion(outputs, accuracy_tensor)
+            print('Prediction {}. True Value {}'.format(outputs, accuracy_tensor))
+            test_loss += loss.item()
         test_loss /= len(utility_samples)
         print('OT Only Test Loss is {}'.format(test_loss))
         now = datetime.datetime.now()
@@ -558,7 +556,8 @@ def evaluate():
         model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples()
-        print('Evaluation DeepSets OT')
+        print('Evaluation DeepSets OT {}'.format(main_args.dataset))
+        test_loss = 0
         for dataloader, ot, accuracy in utility_samples:
             opt_transport_tensor = torch.tensor([ot], device=main_args.device)
             accuracy_tensor = torch.tensor([[accuracy]], device=main_args.device)
@@ -597,7 +596,8 @@ def evaluate():
             model.eval() # Set the model to evaluation mode
         
         utility_samples = sample_utility_samples()
-        print('Evaluation DeepSets')
+        print('Evaluation DeepSets {}'.format(main_args.dataset))
+        test_loss = 0
         true_values = []
         predicted_values = []
         for dataloader, accuracy in utility_samples:
